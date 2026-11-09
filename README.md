@@ -13,6 +13,14 @@ A personal calorie and macro tracker that runs as a web app on your iPhone's Hom
 - **Monday weigh-in:** the first time you open the app on a Monday, it asks for your weight. "Not today" skips it until next week.
 - **Backup:** export and restore from Profile, with a reminder every 30 days.
 
+### Added in version 1.4
+
+- **Custom calorie goal:** in **Profile > Calorie goal**, choose **Custom** and type a number. Macros and nutrient goals follow it.
+- **Complete days:** at the bottom of Today, mark whether you logged everything. Today also asks about yesterday until you answer. Once you've marked any day, averages count complete days only.
+- **What you actually burn (Progress):** after 10+ complete days and 3+ weigh-ins spread over at least 2 weeks (within the last 4), the app estimates your real maintenance calories from what you ate and how your weight moved. Tap **Use this for my goals** to base your calorie goal on it instead of the formula. Weighing in 2 or 3 times a week makes it steadier.
+- **Week budget (Today):** your calories for Monday to Sunday against 7 days of goal, with what that leaves per day for the rest of the week. Past days with nothing logged, or marked incomplete, count as on goal.
+- **Waist:** log it from Progress or on the Monday weigh-in.
+
 ### Added in version 1.3
 
 - **Over-goal check:** before you log something that would push you past a daily goal, the app shows which goals and by how much, and asks you to confirm. It only asks when an item crosses a goal, not for every item after you're already over. Pick which goals count in **Profile > Settings**. By default that's calories, carbs, fat, added sugars, saturated fat, sodium and cholesterol.

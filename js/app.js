@@ -99,7 +99,8 @@ function maybeWeighIn() {
   const today = dateKey(now);
   openWeightSheet(ctx, {
     title: 'Monday weigh-in',
-    intro: "It's Monday. What does the scale say this morning?",
+    intro: "It's Monday. What does the scale say this morning? Add your waist too if you measure it.",
+    withWaist: true,
     skipLabel: 'Not today',
     onDone: () => (state.weighOpen = false),
     onSkip: () => {

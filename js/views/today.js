@@ -1,6 +1,6 @@
 // Today: the day's totals laid out like a Nutrition Facts panel, then the diary by meal.
 
-import { NUTRIENTS, computeGoals, totalsForEntries, addDays, dateKey, describeAmount, scaleNutrients, trimNum } from '../nutrition.js';
+import { NUTRIENTS, computeGoals, totalsForEntries, addDays, dateKey, describeAmount, scaleNutrients, trimNum, weekSummary, parseKey } from '../nutrition.js';
 import { esc, fmt, mount, openSheet, toast, SLOTS, slotOptions, defaultSlot, nutrientTable, readNum, dateLabel, longDate, icon } from '../ui.js';
 import { openAdd } from './add.js';
 import { confirmOverGoals } from '../guard.js';
@@ -57,6 +57,59 @@ export function renderToday(view, ctx) {
     calBlock = `<div class="cal"><p class="cal-num"><span class="big">${fmt(eaten)}</span><span class="cal-word">calories eaten</span></p></div>`;
   }
 
+  // ----- check-in for yesterday, and this day's status -----
+  const yesterday = addDays(today, -1);
+  const status = store.state.dayStatus || {};
+  const yEntries = store.entriesForDate(yesterday);
+  const checkIn =
+    date === today && yEntries.length && !status[yesterday]
+      ? `<div class="checkin" role="region" aria-label="Yesterday check-in">
+          <p><b>Yesterday: ${fmt(yEntries.reduce((a, e) => a + (e.nutrients.kcal || 0), 0))} kcal.</b> Did you log everything you ate?</p>
+          <div class="btn-row">
+            <button type="button" class="btn small" data-act="status" data-date="${yesterday}" data-s="complete">Yes, all of it</button>
+            <button type="button" class="btn small" data-act="status" data-date="${yesterday}" data-s="partial">No, I missed some</button>
+          </div>
+          <p class="hint">Only complete days count toward your averages and the maintenance estimate.</p>
+        </div>`
+      : '';
+  const dayStatusHtml =
+    entries.length && date <= today
+      ? `<section class="day-status" aria-label="Was this day fully logged">
+          <p>${date === today ? 'Done for the day?' : 'Was this day fully logged?'}</p>
+          <div class="seg small" role="group" aria-label="Day status">
+            <button type="button" data-act="status" data-date="${date}" data-s="complete" aria-pressed="${status[date] === 'complete'}">${icon.check} Logged everything</button>
+            <button type="button" data-act="status" data-date="${date}" data-s="partial" aria-pressed="${status[date] === 'partial'}">Missed some</button>
+          </div>
+        </section>`
+      : '';
+
+  // ----- week strip -----
+  let weekHtml = '';
+  if (t) {
+    const w = weekSummary({ log: store.state.log, dayStatus: status, goalKcal: t.kcal, date });
+    const letters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const cells = w.days
+      .map((d, i) => {
+        const future = d.date > date;
+        const pct = d.logged ? Math.min(100, (d.kcal / t.kcal) * 100) : 0;
+        const cls = future ? 'future' : !d.logged ? 'empty' : d.kcal > t.kcal ? 'over' : '';
+        const label = future ? 'not yet' : d.logged ? `${fmt(d.kcal)} kcal${d.status === 'partial' ? ', incomplete' : ''}` : 'nothing logged';
+        return `<li class="wk ${cls}${d.date === date ? ' cur' : ''}" title="${label}">
+            <span class="wk-bar" aria-hidden="true"><i style="height:${pct.toFixed(0)}%"></i></span>
+            <span class="wk-day">${letters[i]}<span class="visually-hidden">, ${parseKey(d.date).toLocaleDateString('en-US', { weekday: 'long' })}: ${label}</span></span>
+          </li>`;
+      })
+      .join('');
+    const rest = Math.round(w.perDayRest);
+    weekHtml = `<div class="week" aria-label="This week">
+        <ol class="wk-strip">${cells}</ol>
+        <div class="wk-text">
+          <p>${w.left >= 0 ? `<b>${fmt(w.left)}</b> kcal left this week` : `<b class="over-word">${fmt(-w.left)} kcal over</b> for the week`}</p>
+          <p class="muted small">${w.remainingDays > 1 ? `About ${fmt(rest)} a day for the rest of the week, today included.` : 'Last day of the week.'}${w.assumed ? ` ${w.assumed} unlogged or incomplete day${w.assumed === 1 ? '' : 's'} counted as on goal.` : ''}</p>
+        </div>
+      </div>`;
+  }
+
   const slotHtml = SLOTS.map((s) => {
     const list = entries.filter((e) => e.slot === s.id);
     const kcal = list.reduce((sum, e) => sum + (e.nutrients.kcal || 0), 0);
@@ -93,6 +146,7 @@ export function renderToday(view, ctx) {
         ? `<div class="banner"><p><b>Set up your profile</b> to get daily calorie, macro and nutrient goals.</p><button type="button" class="btn primary" data-act="profile">Set up profile</button></div>`
         : ''
     }
+    ${checkIn}
     <section class="label" aria-label="Totals for ${esc(longDate(date))}">
       <header class="label-head">
         <button type="button" class="icon-btn" data-act="prev" aria-label="Previous day">${icon.left}</button>
@@ -101,6 +155,7 @@ export function renderToday(view, ctx) {
       </header>
       <div class="rule-heavy"></div>
       ${calBlock}
+      ${weekHtml}
       <div class="rule-mid"></div>
       ${MACROS.map((k) => row(k, totals, reported, count, t)).join('')}
       <div class="rule-mid"></div>
@@ -114,6 +169,7 @@ export function renderToday(view, ctx) {
       ${date !== today ? '<button type="button" class="link" data-act="today">Back to today</button>' : ''}
     </section>
     ${slotHtml}
+    ${dayStatusHtml}
     <button type="button" class="fab" data-act="add">${icon.plus}<span>Add food</span></button>`,
     {
       prev: () => ctx.setDate(addDays(date, -1)),
@@ -130,6 +186,11 @@ export function renderToday(view, ctx) {
         copyEntries(ctx, src, date, el.dataset.slot);
       },
       copyfrom: (el) => openCopy(ctx, el.dataset.slot, date),
+      status: (el) => {
+        const cur = (store.state.dayStatus || {})[el.dataset.date];
+        // Tapping the selected choice again clears it.
+        store.setDayStatus(el.dataset.date, cur === el.dataset.s && el.closest('.day-status') ? '' : el.dataset.s);
+      },
     }
   );
 }

@@ -1,8 +1,19 @@
 // Bump these with every release, and bump VERSION in sw.js to match (macrolog-v + the release number).
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 export const RELEASED = '2026-11-08';
 
 export const CHANGELOG = [
+  {
+    version: '1.4.0',
+    date: '2026-11-08',
+    notes: [
+      'Custom calorie goal in Profile.',
+      'Mark days complete. Averages and the maintenance estimate count complete days only.',
+      'Progress estimates what you actually burn from your logs and weigh-ins, and can use it for your goals.',
+      'Weekly calorie budget on Today, Monday to Sunday.',
+      'Waist tracking, including on the Monday weigh-in.',
+    ],
+  },
   {
     version: '1.3.0',
     date: '2026-11-08',

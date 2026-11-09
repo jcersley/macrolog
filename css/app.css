@@ -370,3 +370,28 @@ body.locked #toasts { top: calc(env(safe-area-inset-top) + 12px); bottom: auto; 
 .ov-nums { text-align: right; font-variant-numeric: tabular-nums; }
 .ov-nums b { font-weight: 900; color: var(--accent-text); }
 .ov-by { grid-column: 1 / -1; font-size: 0.8125rem; color: var(--muted); font-weight: 600; }
+
+/* ---------- v1.4: week, day status, maintenance, waist ---------- */
+.week { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; padding: 4px 0 12px; }
+.wk-strip { list-style: none; margin: 0; padding: 0; display: flex; gap: 4px; }
+.wk { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 18px; }
+.wk-bar { position: relative; width: 12px; height: 34px; background: var(--hair); border-radius: 2px; overflow: hidden; display: block; }
+.wk-bar i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--ink); }
+.wk.over .wk-bar i { background: var(--accent); height: 100% !important; }
+.wk.empty .wk-bar { background: none; border: 1.5px dashed var(--line); }
+.wk.future .wk-bar { background: none; border: 1px solid var(--hair); }
+.wk-day { font-size: 0.6875rem; font-weight: 800; color: var(--muted); }
+.wk.cur .wk-day { color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 2px; }
+.wk-text p { font-size: 0.9375rem; }
+.over-word { color: var(--accent-text); }
+.checkin { background: var(--panel); border: 2px solid var(--ink); padding: 12px 14px; display: grid; gap: 10px; }
+.day-status { display: grid; gap: 8px; padding-top: 10px; }
+.day-status p { font-weight: 800; }
+.day-status .seg button { gap: 6px; }
+.day-status .ico { width: 16px; height: 16px; }
+.needs { list-style: none; margin: 0; padding: 0; }
+.needs li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hair); font-size: 0.9375rem; }
+.need { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.need.met { color: var(--muted); }
+.need.met::after { content: " \2713"; }
+.stats.two-col { grid-template-columns: repeat(2, 1fr); }

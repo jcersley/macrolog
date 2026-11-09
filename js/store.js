@@ -12,6 +12,8 @@ const defaults = () => ({
   meals: [], // { id, name, yield, items: [{ name, servings, servingLabel, nutrients }], lastUsed }
   log: [], // { id, date, slot, name, detail, nutrients, kind }
   weights: [], // { date, kg }
+  waists: [], // { date, cm }
+  dayStatus: {}, // { 'YYYY-MM-DD': 'complete' | 'partial' }
 });
 
 export const uid = () =>
@@ -42,6 +44,8 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
       meals: Array.isArray(s.meals) ? s.meals : [],
       log: Array.isArray(s.log) ? s.log : [],
       weights: Array.isArray(s.weights) ? s.weights : [],
+      waists: Array.isArray(s.waists) ? s.waists : [],
+      dayStatus: s.dayStatus && typeof s.dayStatus === 'object' && !Array.isArray(s.dayStatus) ? s.dayStatus : {},
     };
   }
 
@@ -84,6 +88,22 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
     removeWeight(date) {
       state.weights = state.weights.filter((w) => w.date !== date);
       if (state.profile && state.weights.length) state.profile.weightKg = api.latestWeightKg();
+      commit();
+    },
+    setWaist(date, cm) {
+      const i = state.waists.findIndex((w) => w.date === date);
+      if (i >= 0) state.waists[i].cm = cm;
+      else state.waists.push({ date, cm });
+      commit();
+    },
+    removeWaist(date) {
+      state.waists = state.waists.filter((w) => w.date !== date);
+      commit();
+    },
+    // 'complete' = everything eaten that day is logged; 'partial' = it isn't; '' = not answered.
+    setDayStatus(date, status) {
+      if (status) state.dayStatus[date] = status;
+      else delete state.dayStatus[date];
       commit();
     },
     saveProfile(profile, today = dateKey()) {
@@ -223,7 +243,7 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
       if (!data || typeof data !== 'object') return { ok: false, error: 'That file is not a macrolog backup.' };
       state = normalize(data);
       commit();
-      return { ok: true, counts: { foods: state.foods.length, meals: state.meals.length, entries: state.log.length, weights: state.weights.length } };
+      return { ok: true, counts: { foods: state.foods.length, meals: state.meals.length, entries: state.log.length, weights: state.weights.length, waists: state.waists.length } };
     },
     resetAll() {
       state = defaults();

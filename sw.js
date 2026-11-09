@@ -1,5 +1,5 @@
 // Offline cache for the app itself. Bump VERSION on every update so phones fetch the new files. Food database requests (other origins) are never cached.
-const VERSION = 'macrolog-v4'; // keep in step with js/version.js
+const VERSION = 'macrolog-v5'; // keep in step with js/version.js
 const SHELL = [
   './',
   'index.html',

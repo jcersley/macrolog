@@ -60,9 +60,10 @@ export function validateProfile(p) {
   if (!p) return ['Fill in your profile to get daily goals.'];
   if (p.sex !== 'male' && p.sex !== 'female') errors.push('Choose a sex. The calorie formula needs it.');
   if (!(p.age >= 18 && p.age <= 100)) errors.push('Age must be between 18 and 100. These guidelines are for adults.');
-  if (!(p.heightCm >= 120 && p.heightCm <= 230)) errors.push('Enter a height between 120 and 230 cm (3‱9″ to 7‱6″).');
+  if (!(p.heightCm >= 120 && p.heightCm <= 230)) errors.push('Enter a height between 120 and 230 cm (3′9″ to 7′6″).');
   if (!(p.weightKg >= 35 && p.weightKg <= 300)) errors.push('Enter a weight between 77 and 660 lb (35–300 kg).');
   if (!ACTIVITY.some((a) => a.id === p.activity)) errors.push('Pick an activity level.');
+  if (p.calorieMode === 'custom' && !(p.customKcal >= 800 && p.customKcal <= 6000)) errors.push('Enter a custom calorie goal between 800 and 6,000.');
   return errors;
 }
 
@@ -89,20 +90,35 @@ export function computeGoals(profile) {
   const warnings = [];
   const factor = ACTIVITY.find((a) => a.id === profile.activity).factor;
   const bmrKcal = bmr(profile);
-  const tdee = bmrKcal * factor;
+  const formulaTdee = bmrKcal * factor;
+  // Maintenance can come from your own logs and weigh-ins instead of the formula.
+  const fromData = profile.maintenanceSource === 'data' && profile.maintenanceKcal >= 1200 && profile.maintenanceKcal <= 6000;
+  const tdee = fromData ? profile.maintenanceKcal : formulaTdee;
+  const customCalories = profile.calorieMode === 'custom';
 
-  const requestedRate = Math.max(0, profile.rateKgPerWeek || 0);
+  const requestedRate = customCalories ? 0 : Math.max(0, profile.rateKgPerWeek || 0);
   const requestedDeficit = requestedRate * LB_PER_KG * (KCAL_PER_LB_FAT / 7);
 
   const floor = profile.sex === 'male' ? 1500 : 1200;
   let calories = round(tdee - requestedDeficit, 10);
   let flooredByMinimum = false;
-  if (calories < floor) {
+  if (customCalories) {
+    calories = Math.round(profile.customKcal);
+    if (calories < floor) {
+      warnings.push(
+        `${calories.toLocaleString('en-US')} kcal is under ${floor.toLocaleString('en-US')}, the usual minimum without medical supervision. It's hard to get enough protein and nutrients that low.`
+      );
+    }
+  } else if (calories < floor) {
     calories = floor;
     flooredByMinimum = true;
   }
   const dailyDeficit = Math.max(0, tdee - calories);
+  const dailySurplus = Math.max(0, calories - tdee);
   const effectiveRateKg = (dailyDeficit * 7) / (KCAL_PER_LB_FAT * LB_PER_KG);
+  if (customCalories && effectiveRateKg > 0.01 * profile.weightKg) {
+    warnings.push('This goal works out to losing more than 1% of your body weight a week, which raises the odds of losing muscle along with fat.');
+  }
 
   if (flooredByMinimum) {
     warnings.push(
@@ -168,7 +184,11 @@ export function computeGoals(profile) {
   };
 
   const basis = {
-    kcal: 'Maintenance calories (Mifflin-St Jeor × activity) minus your weekly-loss deficit. 500 kcal a day is about 1 lb a week.',
+    kcal: customCalories
+      ? 'You set this number.'
+      : fromData
+        ? 'Maintenance estimated from your own logs and weigh-ins, minus your weekly-loss deficit. 500 kcal a day is about 1 lb a week.'
+        : 'Maintenance calories (Mifflin-St Jeor × activity) minus your weekly-loss deficit. 500 kcal a day is about 1 lb a week.',
     protein: '1.6 g per kg of body weight, a common range for keeping muscle while losing weight. Capped at 35% of calories.',
     fat: '25% of calories, inside the 20–35% range in the Dietary Guidelines.',
     carbs: 'What is left after protein and fat.',
@@ -196,6 +216,10 @@ export function computeGoals(profile) {
     warnings,
     bmr: bmrKcal,
     tdee,
+    formulaTdee,
+    maintenanceSource: fromData ? 'data' : 'formula',
+    calorieMode: customCalories ? 'custom' : 'auto',
+    dailySurplus,
     calories,
     floor,
     flooredByMinimum,
@@ -425,4 +449,77 @@ export function estimatedGoalDate({ currentKg, goalKg, rateKgPerWeek, today = da
   if (!(goalKg > 0) || !(rateKgPerWeek > 0) || goalKg >= currentKg) return null;
   const weeks = (currentKg - goalKg) / rateKgPerWeek;
   return addDays(today, Math.ceil(weeks * 7));
+}
+
+// ---------- Maintenance from your own data ----------
+
+export const ADAPTIVE = { windowDays: 28, minDays: 10, minSpanDays: 14, minWeighIns: 3 };
+
+// Compares what you ate (complete days only) with how your weight trended over the same stretch.
+// Energy balance: maintenance = average intake - (weekly weight change in kg x 7,700 / 7).
+export function estimateMaintenance({ log, weights, dayStatus = {}, today = dateKey(), windowDays = ADAPTIVE.windowDays }) {
+  const start = addDays(today, -windowDays);
+  const end = addDays(today, -1);
+  const byDay = new Map();
+  for (const e of log) {
+    if (e.date < start || e.date > end || dayStatus[e.date] !== 'complete') continue;
+    byDay.set(e.date, (byDay.get(e.date) || 0) + (e.nutrients?.kcal || 0));
+  }
+  const days = [...byDay.values()];
+  const inWindow = sortedWeights(weights).filter((w) => w.date >= start && w.date <= today);
+  const span = inWindow.length > 1 ? daysBetween(inWindow[0].date, inWindow[inWindow.length - 1].date) : 0;
+  const status = { completeDays: days.length, weighIns: inWindow.length, spanDays: span, needs: ADAPTIVE };
+  if (days.length < ADAPTIVE.minDays || inWindow.length < ADAPTIVE.minWeighIns || span < ADAPTIVE.minSpanDays) {
+    return { ok: false, ...status };
+  }
+  const avgIntake = days.reduce((a, b) => a + b, 0) / days.length;
+  const rate = weeklyRate(inWindow, windowDays, today);
+  if (rate === null) return { ok: false, ...status };
+  const kcalPerKg = KCAL_PER_LB_FAT * LB_PER_KG;
+  const raw = avgIntake - (rate * kcalPerKg) / 7;
+  const maintenance = Math.min(6000, Math.max(1200, Math.round(raw / 10) * 10));
+  const confidence = days.length >= 20 && inWindow.length >= 6 ? 'good' : 'rough';
+  return { ok: true, ...status, avgIntake, rateKgPerWeek: rate, maintenance, confidence };
+}
+
+// ---------- Week budget (Monday to Sunday) ----------
+
+export function weekStart(key) {
+  const d = parseKey(key);
+  const back = (d.getDay() + 6) % 7;
+  return addDays(key, -back);
+}
+
+// Days with nothing logged (or marked incomplete) before today count as on-goal,
+// so a forgotten day doesn't look like a 2,000 kcal surplus in the budget.
+export function weekSummary({ log, dayStatus = {}, goalKcal, date }) {
+  const start = weekStart(date);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(start, i);
+    const entries = log.filter((e) => e.date === d);
+    const kcal = entries.reduce((a, e) => a + (e.nutrients?.kcal || 0), 0);
+    days.push({ date: d, kcal, logged: entries.length > 0, status: dayStatus[d] || '' });
+  }
+  const budget = goalKcal * 7;
+  let counted = 0;
+  let used = 0;
+  let assumed = 0;
+  for (const day of days) {
+    if (day.date > date) continue;
+    const isPast = day.date < date;
+    if (isPast && (!day.logged || day.status === 'partial')) {
+      used += goalKcal;
+      assumed++;
+    } else {
+      used += day.kcal;
+    }
+    counted++;
+  }
+  const remainingDays = 7 - counted + 1; // today plus the days after it
+  const leftToday = goalKcal - (days.find((d) => d.date === date)?.kcal || 0);
+  const left = budget - used;
+  const usedBeforeToday = used - (days.find((d) => d.date === date)?.kcal || 0);
+  const perDayRest = (budget - usedBeforeToday) / remainingDays;
+  return { start, days, budget, used, left, assumed, remainingDays, perDayRest, leftToday };
 }

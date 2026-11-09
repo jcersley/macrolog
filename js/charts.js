@@ -22,9 +22,10 @@ function niceTicks(min, max, count = 4) {
 
 const f1 = (n) => Number(n.toFixed(1));
 
-export function weightChart({ points, trend, units = 'us', pace, goalKg, width = 360, height = 230 }) {
-  const conv = (kg) => (units === 'us' ? kgToLb(kg) : kg);
-  const unitLabel = units === 'us' ? 'lb' : 'kg';
+// Also draws waist: pass convert and unit to override the kg-to-lb conversion.
+export function weightChart({ points, trend, units = 'us', pace, goalKg, width = 360, height = 230, convert, unit, title = 'Weight' }) {
+  const conv = convert || ((kg) => (units === 'us' ? kgToLb(kg) : kg));
+  const unitLabel = unit || (units === 'us' ? 'lb' : 'kg');
   const m = { l: 44, r: 14, t: 14, b: 28 };
   const pw = width - m.l - m.r;
   const ph = height - m.t - m.b;
@@ -53,7 +54,7 @@ export function weightChart({ points, trend, units = 'us', pace, goalKg, width =
   const yMax = ticks[ticks.length - 1];
   const y = (v) => m.t + ph - ((v - yMin) / (yMax - yMin)) * ph;
 
-  let svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Weight over time in ${unitLabel}, from ${shortDate(d0)} to ${shortDate(d1)}">`;
+  let svg = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${title} over time in ${unitLabel}, from ${shortDate(d0)} to ${shortDate(d1)}">`;
   for (const t of ticks) {
     svg += `<line class="grid" x1="${m.l}" x2="${width - m.r}" y1="${f1(y(t))}" y2="${f1(y(t))}"/>`;
     svg += `<text class="axis" x="${m.l - 6}" y="${f1(y(t) + 4)}" text-anchor="end">${Number(t.toFixed(1))}</text>`;

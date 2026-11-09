@@ -24,6 +24,11 @@ export function renderProfile(view, ctx) {
   const { store } = ctx;
   const units = store.state.settings.units;
   if (!draft) draft = { sex: '', age: '', heightCm: '', weightKg: store.latestWeightKg() || '', activity: 'moderate', rateKgPerWeek: lbToKg(1), goalWeightKg: '', ...(store.state.profile || {}) };
+  // Maintenance-from-data is changed on the Progress tab, so always take the saved value.
+  const saved = store.state.profile || {};
+  draft.maintenanceSource = saved.maintenanceSource;
+  draft.maintenanceKcal = saved.maintenanceKcal;
+  draft.maintenanceDate = saved.maintenanceDate;
 
   const ftin = draft.heightCm ? cmToFtIn(draft.heightCm) : { ft: '', inches: '' };
   const rates = RATES[units];
@@ -62,7 +67,14 @@ export function renderProfile(view, ctx) {
       }
       <label class="field"><span>Activity</span><select id="p-activity">${ACTIVITY.map((a) => `<option value="${a.id}"${a.id === draft.activity ? ' selected' : ''}>${a.label}</option>`).join('')}</select></label>
       <p class="hint" id="act-hint">${esc(ACTIVITY.find((a) => a.id === draft.activity)?.hint || '')}</p>
-      <label class="field"><span>Weekly goal</span><select id="p-rate">${rates.map((r, i) => `<option value="${i}"${r === closestRate ? ' selected' : ''}>${r.label}${r.kg ? ' loss' : ''}</option>`).join('')}</select></label>
+      <fieldset class="field"><legend>Calorie goal</legend>
+        <div class="seg">
+          <label class="seg-opt"><input type="radio" name="calorieMode" value="auto"${draft.calorieMode !== 'custom' ? ' checked' : ''}><span>From weekly goal</span></label>
+          <label class="seg-opt"><input type="radio" name="calorieMode" value="custom"${draft.calorieMode === 'custom' ? ' checked' : ''}><span>Custom</span></label>
+        </div>
+      </fieldset>
+      <label class="field" id="kcal-field"${draft.calorieMode === 'custom' ? '' : ' hidden'}><span>Calories a day</span><input id="p-kcal" inputmode="numeric" autocomplete="off" value="${draft.customKcal ? Math.round(draft.customKcal) : ''}"></label>
+      <label class="field" id="rate-field"${draft.calorieMode === 'custom' ? ' hidden' : ''}><span>Weekly goal</span><select id="p-rate">${rates.map((r, i) => `<option value="${i}"${r === closestRate ? ' selected' : ''}>${r.label}${r.kg ? ' loss' : ''}</option>`).join('')}</select></label>
       <label class="field"><span>Goal weight <small>optional, for the chart and an estimated date</small></span><input id="p-goal" inputmode="decimal" autocomplete="off" value="${wDisp(draft.goalWeightKg)}"></label>
       <fieldset class="field"><legend>Macros</legend>
         <div class="seg">
@@ -190,6 +202,16 @@ export function renderProfile(view, ctx) {
   const live = () => {
     readForm(root, units);
     actHint.textContent = ACTIVITY.find((a) => a.id === draft.activity)?.hint || '';
+    const custKcal = draft.calorieMode === 'custom';
+    root.querySelector('#kcal-field').hidden = !custKcal;
+    root.querySelector('#rate-field').hidden = custKcal;
+    if (custKcal && !root.querySelector('#p-kcal').value) {
+      const seed = computeGoals({ ...toProfile(draft), calorieMode: 'auto' });
+      if (seed.ok) {
+        root.querySelector('#p-kcal').value = seed.targets.kcal;
+        draft.customKcal = seed.targets.kcal;
+      }
+    }
     const g = computeGoals(toProfile(draft));
     // Custom macros: show the filled-in macro and each one's share of calories.
     const custom = draft.macroMode === 'custom';
@@ -230,6 +252,8 @@ function readForm(root, units) {
   draft.rateKgPerWeek = RATES[units][Number(root.querySelector('#p-rate').value)]?.kg ?? 0;
   const g = num('#p-goal');
   draft.goalWeightKg = g > 0 ? (units === 'us' ? lbToKg(g) : g) : '';
+  draft.calorieMode = root.querySelector('input[name="calorieMode"]:checked')?.value === 'custom' ? 'custom' : 'auto';
+  draft.customKcal = num('#p-kcal');
   draft.macroMode = root.querySelector('input[name="macroMode"]:checked')?.value === 'custom' ? 'custom' : 'auto';
   const fill = root.querySelector('input[name="fill"]:checked')?.value || 'carbs';
   const cm = { fill };
@@ -250,6 +274,11 @@ function toProfile(d) {
     rateKgPerWeek: d.rateKgPerWeek,
     ...(d.goalWeightKg > 0 ? { goalWeightKg: d.goalWeightKg } : {}),
     macroMode: d.macroMode === 'custom' ? 'custom' : 'auto',
+    calorieMode: d.calorieMode === 'custom' ? 'custom' : 'auto',
+    ...(d.calorieMode === 'custom' ? { customKcal: Number(d.customKcal) } : {}),
+    // Set from Progress when you choose maintenance from your own data.
+    ...(d.maintenanceSource ? { maintenanceSource: d.maintenanceSource } : {}),
+    ...(d.maintenanceKcal ? { maintenanceKcal: d.maintenanceKcal, maintenanceDate: d.maintenanceDate } : {}),
     ...(d.customMacros ? { customMacros: { ...d.customMacros } } : {}),
   };
 }
@@ -263,9 +292,13 @@ function goalsHtml(g, units, saved) {
   }).join('');
   return `
     <p class="goal-lead"><span class="big">${fmt(g.targets.kcal)}</span> kcal a day</p>
-    <p class="muted">You burn about ${fmt(Math.round(g.tdee / 10) * 10)} a day. ${
-      g.dailyDeficit > 0 ? `A ${fmt(Math.round(g.dailyDeficit / 10) * 10)} kcal daily deficit is about ${fmtWeight(g.effectiveRateKg, units)} a week.` : 'This goal maintains your weight.'
-    }</p>
+    <p class="muted">You burn about ${fmt(Math.round(g.tdee / 10) * 10)} a day (${g.maintenanceSource === 'data' ? 'estimated from your logs and weigh-ins' : 'formula estimate'}). ${
+      g.dailyDeficit > 0
+        ? `A ${fmt(Math.round(g.dailyDeficit / 10) * 10)} kcal daily deficit is about ${fmtWeight(g.effectiveRateKg, units)} a week.`
+        : g.dailySurplus > 10
+          ? `This is a ${fmt(Math.round(g.dailySurplus / 10) * 10)} kcal daily surplus, so expect slow gain.`
+          : 'This goal maintains your weight.'
+    }${g.maintenanceSource === 'formula' ? ' After a few weeks of logging, Progress can estimate what you really burn.' : ''}</p>
     <p class="macro-split">${MACRO_KEYS.map(
       (k) => `<span>${{ protein: 'Protein', carbs: 'Carbs', fat: 'Fat' }[k]} <b>${g.targets[k]} g</b><small>${Math.round(g.macroPct[k])}%${g.macroMode === 'custom' ? (k === g.macroFill ? ', fills' : ', set') : ''}</small></span>`
     ).join('')}</p>
