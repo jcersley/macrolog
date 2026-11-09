@@ -6,6 +6,7 @@ import { BarcodeScanner, decodeImageFile, describeCameraError } from '../scanner
 import { openSheet, mount, esc, fmt, readNum, toast, defaultSlot, slotOptions, nutrientTable, macroLine, icon, SLOTS, amountChips, wireAmountChips } from '../ui.js';
 import { renderFoodForm, nutrientInputsHtml, readNutrients, wireCalorieHint, errorBox } from './foodform.js';
 import { openMealBuilder } from './mealbuilder.js';
+import { confirmOverGoals } from '../guard.js';
 
 const TABS = [
   { id: 'recent', label: 'Recent' },
@@ -56,10 +57,12 @@ export function openAdd(ctx, opts = {}) {
     scanner = null;
   };
 
-  function logEntry(entry, label) {
+  async function logEntry(entry, label) {
+    if (!(await confirmOverGoals(ctx, { date: state.date, add: [entry.nutrients] }))) return false;
     const rec = ctx.store.addEntry({ date: state.date, slot: state.slot, ...entry });
     sheet.close();
     toast(`Logged ${label}`, { actionLabel: 'Undo', onAction: () => ctx.store.deleteEntry(rec.id) });
+    return true;
   }
 
   // ---------- tabs ----------
@@ -140,8 +143,9 @@ export function openAdd(ctx, opts = {}) {
   }
 
   // Logs without closing, so you can add several things in a row.
-  function quickLog(el, group) {
+  async function quickLog(el, group) {
     const entry = repeatEntry(group);
+    if (!(await confirmOverGoals(ctx, { date: state.date, add: [entry.nutrients] }))) return;
     if (entry.foodId && entry.kind === 'food') ctx.store.touchFood(entry.foodId);
     if (entry.mealId) ctx.store.touchMeal(entry.mealId);
     const rec = ctx.store.addEntry({ ...entry, date: state.date, slot: state.slot });
@@ -328,10 +332,14 @@ export function openAdd(ctx, opts = {}) {
           const q = readNum(qtyEl);
           if (!(q > 0)) return update();
           state.slot = root.querySelector('#slot').value;
-          const saved = ctx.store.state.foods.some((x) => x.id === food.id) ? food : ctx.store.saveFood(food);
-          ctx.store.touchFood(saved.id);
-          logEntry(
-            {
+          const nutrients = nutrientsForAmount(food, q, unit);
+          confirmOverGoals(ctx, { date: state.date, add: [nutrients] }).then((ok) => {
+            if (!ok) return;
+            const saved = ctx.store.state.foods.some((x) => x.id === food.id) ? food : ctx.store.saveFood(food);
+            ctx.store.touchFood(saved.id);
+            const rec = ctx.store.addEntry({
+              date: state.date,
+              slot: state.slot,
               kind: 'food',
               foodId: saved.id,
               name: saved.name,
@@ -339,10 +347,11 @@ export function openAdd(ctx, opts = {}) {
               qty: q,
               unit,
               servingLabel: saved.servingLabel,
-              nutrients: nutrientsForAmount(saved, q, unit),
-            },
-            saved.name
-          );
+              nutrients,
+            });
+            sheet.close();
+            toast(`Logged ${saved.name}`, { actionLabel: 'Undo', onAction: () => ctx.store.deleteEntry(rec.id) });
+          });
         },
       }
     );
@@ -491,11 +500,10 @@ export function openAdd(ctx, opts = {}) {
           const q = readNum(qtyEl);
           if (!(q > 0)) return update();
           state.slot = root.querySelector('#slot').value;
-          ctx.store.touchMeal(meal.id);
           logEntry(
             { kind: 'meal', mealId: meal.id, name: meal.name, brand: '', qty: q, unit: 'serving', servingLabel: '1 serving', nutrients: scaleNutrients(meal.perServing, q) },
             meal.name
-          );
+          ).then((ok) => ok && ctx.store.touchMeal(meal.id));
         },
       }
     );
@@ -535,13 +543,18 @@ export function openAdd(ctx, opts = {}) {
             return;
           }
           state.slot = root.querySelector('#slot').value;
-          let foodId;
-          if (save) {
-            const f = ctx.store.saveFood({ name, brand: '', barcode: '', servingLabel: '1 serving', nutrients, source: 'Quick add' });
-            ctx.store.touchFood(f.id);
-            foodId = f.id;
-          }
-          logEntry({ kind: 'quick', foodId, name: name || 'Quick add', brand: '', qty: 1, unit: 'serving', servingLabel: '1 serving', nutrients }, name || 'quick add');
+          confirmOverGoals(ctx, { date: state.date, add: [nutrients] }).then((ok) => {
+            if (!ok) return;
+            let foodId;
+            if (save) {
+              const f = ctx.store.saveFood({ name, brand: '', barcode: '', servingLabel: '1 serving', nutrients, source: 'Quick add' });
+              ctx.store.touchFood(f.id);
+              foodId = f.id;
+            }
+            const rec = ctx.store.addEntry({ date: state.date, slot: state.slot, kind: 'quick', foodId, name: name || 'Quick add', brand: '', qty: 1, unit: 'serving', servingLabel: '1 serving', nutrients });
+            sheet.close();
+            toast(`Logged ${name || 'quick add'}`, { actionLabel: 'Undo', onAction: () => ctx.store.deleteEntry(rec.id) });
+          });
         },
       }
     );

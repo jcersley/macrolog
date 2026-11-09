@@ -3,6 +3,7 @@
 import { NUTRIENTS, computeGoals, totalsForEntries, addDays, dateKey, describeAmount, scaleNutrients, trimNum } from '../nutrition.js';
 import { esc, fmt, mount, openSheet, toast, SLOTS, slotOptions, defaultSlot, nutrientTable, readNum, dateLabel, longDate, icon } from '../ui.js';
 import { openAdd } from './add.js';
+import { confirmOverGoals } from '../guard.js';
 
 const MACROS = ['protein', 'carbs', 'fat'];
 const WATCH = ['fiber', 'addedSugars', 'satFat', 'sodium', 'cholesterol'];
@@ -138,8 +139,9 @@ function hasHistory(store, slot, date) {
   return store.state.log.some((e) => e.slot === slot && e.date < date && e.date >= from);
 }
 
-function copyEntries(ctx, src, date, slot) {
+async function copyEntries(ctx, src, date, slot) {
   if (!src.length) return;
+  if (!(await confirmOverGoals(ctx, { date, add: src.map((e) => e.nutrients) }))) return;
   const recs = ctx.store.addEntries(src.map(({ id, date: _d, slot: _s, ...rest }) => ({ ...rest, date, slot })));
   const label = SLOTS.find((x) => x.id === slot).label.toLowerCase();
   toast(`Copied ${recs.length} item${recs.length === 1 ? '' : 's'} to ${label}`, {
@@ -195,13 +197,14 @@ function openEntry(ctx, entry) {
       save: () => {
         const q = readNum(qtyEl);
         if (!(q > 0)) return draw();
-        ctx.store.updateEntry(entry.id, {
-          qty: q,
-          nutrients: scaleNutrients(entry.nutrients, q / entry.qty),
-          slot: root.querySelector('#slot').value,
+        const nutrients = scaleNutrients(entry.nutrients, q / entry.qty);
+        const slot = root.querySelector('#slot').value;
+        confirmOverGoals(ctx, { date: entry.date, add: [nutrients], replacing: entry }).then((ok) => {
+          if (!ok) return;
+          ctx.store.updateEntry(entry.id, { qty: q, nutrients, slot });
+          s.close();
+          toast('Entry updated');
         });
-        s.close();
-        toast('Entry updated');
       },
       delete: () => {
         const copy = { ...entry };

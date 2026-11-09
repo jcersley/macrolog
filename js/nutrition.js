@@ -132,6 +132,24 @@ export function computeGoals(profile) {
   fatG = round(fatG, 5);
   // Carbs fill what's left after the rounded protein and fat, so the three add up.
   carbsG = round(Math.max((calories - proteinG * 4 - fatG * 9) / 4, 0), 5);
+  const recommendedMacros = { protein: proteinG, carbs: carbsG, fat: fatG };
+
+  const custom = profile.macroMode === 'custom' && profile.customMacros ? applyCustomMacros(calories, profile.customMacros) : null;
+  if (custom) {
+    ({ protein: proteinG, carbs: carbsG, fat: fatG } = custom.macros);
+    const names = { protein: 'Protein', carbs: 'Carbs', fat: 'Fat' };
+    if (custom.overBy > 0) {
+      warnings.push(
+        `The macros you set add up to ${Math.round(custom.overBy).toLocaleString('en-US')} kcal more than your calorie goal, so ${names[custom.fill].toLowerCase()} is at 0 g. Lower one of them.`
+      );
+    }
+    if (proteinG < 0.8 * profile.weightKg) {
+      warnings.push(`Protein is under 0.8 g per kg of body weight, the minimum daily recommendation. While losing weight, more protein helps you keep muscle.`);
+    }
+    if ((fatG * 9) / calories < 0.2) {
+      warnings.push('Fat is under 20% of calories, below the Dietary Guidelines range. Very low fat makes some vitamins harder to absorb.');
+    }
+  }
 
   const micro = micronutrientTargets(profile);
   const fiberFloor = profile.sex === 'male' ? 30 : 25;
@@ -154,6 +172,11 @@ export function computeGoals(profile) {
     protein: '1.6 g per kg of body weight, a common range for keeping muscle while losing weight. Capped at 35% of calories.',
     fat: '25% of calories, inside the 20–35% range in the Dietary Guidelines.',
     carbs: 'What is left after protein and fat.',
+    ...(custom
+      ? Object.fromEntries(
+          ['protein', 'carbs', 'fat'].map((k) => [k, k === custom.fill ? `Fills what's left of your ${calories.toLocaleString('en-US')} kcal after the other two.` : 'You set this.'])
+        )
+      : {}),
     fiber: 'Dietary Guidelines: 14 g per 1,000 kcal, with a floor of 25 g (30 g for men).',
     addedSugars: 'Under 10% of calories, and no more than the FDA Daily Value of 50 g.',
     satFat: 'Under 10% of calories (Dietary Guidelines).',
@@ -181,12 +204,54 @@ export function computeGoals(profile) {
     dailyDeficit,
     targets,
     basis,
+    macroMode: custom ? 'custom' : 'auto',
+    macroFill: custom?.fill || 'carbs',
+    recommendedMacros,
     macroPct: {
       protein: (proteinG * 4 * 100) / calories,
       carbs: (carbsG * 4 * 100) / calories,
       fat: (fatG * 9 * 100) / calories,
     },
   };
+}
+
+export const MACRO_KCAL = { protein: 4, carbs: 4, fat: 9 };
+export const MACRO_KEYS = ['protein', 'carbs', 'fat'];
+
+// You set two macros in grams; the third ("fill") takes whatever calories are left.
+export function applyCustomMacros(calories, custom) {
+  const fill = MACRO_KEYS.includes(custom?.fill) ? custom.fill : 'carbs';
+  const macros = {};
+  let used = 0;
+  for (const k of MACRO_KEYS) {
+    if (k === fill) continue;
+    const g = Math.max(0, Math.round(Number(custom?.[k]) || 0));
+    macros[k] = g;
+    used += g * MACRO_KCAL[k];
+  }
+  const left = calories - used;
+  macros[fill] = Math.max(0, Math.round(left / MACRO_KCAL[fill]));
+  return { macros, fill, overBy: left < 0 ? -left : 0 };
+}
+
+// ---------- Over-goal check ----------
+
+// Nutrients where going past the goal is worth a heads-up. Protein, fiber and vitamins are left out by default.
+export const WATCHABLE = ['kcal', 'protein', 'carbs', 'fat', 'addedSugars', 'satFat', 'sodium', 'cholesterol'];
+export const DEFAULT_WATCH = ['kcal', 'carbs', 'fat', 'addedSugars', 'satFat', 'sodium', 'cholesterol'];
+
+// Which watched nutrients this addition pushes from at-or-under the goal to over it.
+export function overages({ before, adding, targets, watch = DEFAULT_WATCH }) {
+  const out = [];
+  for (const key of watch) {
+    const target = targets?.[key];
+    const add = adding?.[key] || 0;
+    if (!(target > 0) || !(add > 0)) continue;
+    const was = before?.[key] || 0;
+    const now = was + add;
+    if (was <= target && now > target) out.push({ key, before: was, after: now, target, adding: add, overBy: now - target });
+  }
+  return out;
 }
 
 // ---------- Nutrient arithmetic ----------

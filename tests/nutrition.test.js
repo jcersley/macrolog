@@ -127,3 +127,44 @@ test('date helpers cross month and DST boundaries', () => {
   assert.equal(addDays('2026-11-01', 7), '2026-11-08');
   assert.equal(daysBetween('2026-10-25', '2026-11-08'), 14);
 });
+
+import { applyCustomMacros, overages, DEFAULT_WATCH } from '../js/nutrition.js';
+
+test('custom macros: two set, the third fills the calories', () => {
+  const r = applyCustomMacros(2540, { protein: 200, fat: 70, fill: 'carbs' });
+  assert.deepEqual(r.macros, { protein: 200, fat: 70, carbs: 278 });
+  assert.equal(r.overBy, 0);
+  const f = applyCustomMacros(2000, { protein: 180, carbs: 150, fill: 'fat' });
+  assert.equal(f.macros.fat, Math.round((2000 - 720 - 600) / 9));
+  const over = applyCustomMacros(1500, { protein: 250, fat: 80, fill: 'carbs' });
+  assert.equal(over.macros.carbs, 0);
+  assert.equal(over.overBy, 250 * 4 + 80 * 9 - 1500);
+});
+
+test('custom macros flow through computeGoals and follow calorie changes', () => {
+  const base = { sex: 'male', age: 31, heightCm: ftInToCm(5, 10), weightKg: lbToKg(220), activity: 'moderate', rateKgPerWeek: lbToKg(1) };
+  const g = computeGoals({ ...base, macroMode: 'custom', customMacros: { protein: 200, fat: 60, fill: 'carbs' } });
+  assert.equal(g.targets.protein, 200);
+  assert.equal(g.targets.fat, 60);
+  assert.equal(g.targets.carbs, Math.round((g.targets.kcal - 800 - 540) / 4));
+  assert.equal(g.macroMode, 'custom');
+  assert.equal(g.basis.carbs.startsWith('Fills'), true);
+  const slower = computeGoals({ ...base, rateKgPerWeek: lbToKg(0.5), macroMode: 'custom', customMacros: { protein: 200, fat: 60, fill: 'carbs' } });
+  assert.equal(slower.targets.carbs - g.targets.carbs, Math.round(250 / 4));
+  const low = computeGoals({ ...base, macroMode: 'custom', customMacros: { protein: 60, fat: 30, fill: 'carbs' } });
+  assert.equal(low.warnings.length, 2);
+  // Saved custom values are ignored in recommended mode.
+  assert.equal(computeGoals({ ...base, macroMode: 'auto', customMacros: { protein: 1, fat: 1, fill: 'carbs' } }).targets.protein, 160);
+});
+
+test('over-goal check only fires when crossing a watched goal', () => {
+  const targets = { kcal: 2000, protein: 150, sodium: 2300, carbs: 200 };
+  const o = overages({ before: { kcal: 1800, sodium: 2000, protein: 140 }, adding: { kcal: 300, sodium: 200, protein: 30 }, targets });
+  assert.deepEqual(o.map((x) => x.key), ['kcal']);
+  assert.equal(o[0].overBy, 100);
+  assert.equal(overages({ before: { kcal: 2100 }, adding: { kcal: 100 }, targets }).length, 0);
+  assert.equal(overages({ before: { kcal: 2000 }, adding: { kcal: 1 }, targets }).length, 1);
+  assert.equal(overages({ before: { protein: 140 }, adding: { protein: 30 }, targets, watch: ['protein'] }).length, 1);
+  assert.equal(overages({ before: {}, adding: { kcal: 5000 }, targets, watch: [] }).length, 0);
+  assert.equal(DEFAULT_WATCH.includes('protein'), false);
+});

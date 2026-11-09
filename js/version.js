@@ -1,8 +1,16 @@
 // Bump these with every release, and bump VERSION in sw.js to match (macrolog-v + the release number).
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 export const RELEASED = '2026-11-08';
 
 export const CHANGELOG = [
+  {
+    version: '1.3.0',
+    date: '2026-11-08',
+    notes: [
+      'Asks you to confirm before logging something that puts you over a daily goal. Choose which goals in Profile > Settings.',
+      'Custom macros: set two in grams, and the third fills the rest of your calories.',
+    ],
+  },
   { version: '1.2.0', date: '2026-11-08', notes: ['Version and update info in Profile.'] },
   {
     version: '1.1.0',
