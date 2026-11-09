@@ -13,6 +13,16 @@ A personal calorie and macro tracker that runs as a web app on your iPhone's Hom
 - **Monday weigh-in:** the first time you open the app on a Monday, it asks for your weight. "Not today" skips it until next week.
 - **Backup:** export and restore from Profile, with a reminder every 30 days.
 
+### Added in version 1.6: Recipes
+
+For batch cooking, where you weigh your bowl instead of guessing servings.
+
+1. **Foods tab > Recipes > New recipe.** Name it, set the date you made it, and add each ingredient with how much went in: grams, a USDA portion like "1 medium" onion, or servings from a label. Ingredients come from your foods, a USDA search, a barcode scan, or by hand.
+2. **Weigh the finished food.** Put the full pot on the scale and enter that, plus the empty pot's weight (remembered for next time). The app subtracts. No scale? Enter how many bowls the batch makes instead.
+3. **Log a serving** by the grams in your bowl (weigh the food, not the bowl). It's under the recipe, in the Add sheet's **Meals** tab, and in **Recent** once you've had it.
+4. **Make it again** next week. It copies the last batch to today. Swap the pork sausage for turkey, drop what you didn't have, change amounts, and weigh the new pot. Older batches stay as they were, so leftovers from last week still log correctly (pick the batch when logging).
+5. **Fix a batch** any time. If you'd already logged servings from it, the app offers to recalculate them.
+
 ### Added in version 1.5
 
 - **USDA portion sizes:** when you pick a food from a USDA search, the app fetches every portion size USDA lists for it (the same choices as the dropdown on USDA's website). The amount screen gets a **Portion** menu, like "1 large (50 g)", "1 cup (243 g)" or Grams, and defaults to the first real portion instead of 100 g. Switching portions keeps the same total, so 100 g of egg becomes 2 large. The portions are saved with the food and the app remembers which one you used.

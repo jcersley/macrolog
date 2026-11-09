@@ -5,6 +5,8 @@ import { esc, fmt, mount, openSheet, icon } from '../ui.js';
 import { openAdd, sortFoods } from './add.js';
 import { renderFoodForm } from './foodform.js';
 import { openMealBuilder } from './mealbuilder.js';
+import { openRecipe, recipeSummary, sortRecipes, renderRecipeLog } from './recipes.js';
+import { defaultSlot } from '../ui.js';
 
 let section = 'foods';
 let query = '';
@@ -19,10 +21,27 @@ export function renderFoods(view, ctx) {
     `<header class="page-head"><h1>Foods</h1></header>
     <div class="seg" role="tablist" aria-label="Show">
       <button type="button" role="tab" data-act="section" data-s="foods" aria-selected="${section === 'foods'}">Foods <small>${foods.length}</small></button>
+      <button type="button" role="tab" data-act="section" data-s="recipes" aria-selected="${section === 'recipes'}">Recipes <small>${store.state.recipes.length}</small></button>
       <button type="button" role="tab" data-act="section" data-s="meals" aria-selected="${section === 'meals'}">Meals <small>${meals.length}</small></button>
     </div>
     ${
-      section === 'foods'
+      section === 'recipes'
+        ? `<div class="toolbar"><button type="button" class="btn" data-act="newrecipe">${icon.plus} New recipe</button></div>
+           ${
+             store.state.recipes.length
+               ? `<ul class="list">${sortRecipes(store.state.recipes)
+                   .map(
+                     (r) => `<li class="row-wrap">
+                       <button type="button" class="row" data-act="openrecipe" data-id="${esc(r.id)}">
+                         <span class="r-main"><b>${esc(r.name)}</b><small>${esc(recipeSummary(ctx, r))}</small></span>
+                       </button>
+                       ${r.batches.length ? `<button type="button" class="btn small" data-act="logrecipe" data-id="${esc(r.id)}" aria-label="Log ${esc(r.name)}">Log</button>` : ''}
+                     </li>`
+                   )
+                   .join('')}</ul>`
+               : '<div class="empty"><p>For batch cooking. Enter what went in the pot and weigh the finished food once. Then log your bowl by its weight. Next time you make it, copy the last batch and change what\u2019s different.</p></div>'
+           }`
+        : section === 'foods'
         ? `<div class="toolbar">
              ${foods.length ? `<input type="search" id="q" class="search" placeholder="Search your foods" aria-label="Search your foods" autocomplete="off" value="${esc(query)}">` : ''}
              <button type="button" class="btn" data-act="newfood">${icon.plus} New food</button>
@@ -66,6 +85,14 @@ export function renderFoods(view, ctx) {
         if (food) openAdd(ctx, { food });
       },
       newmeal: () => openMealBuilder(ctx),
+      newrecipe: () => openRecipe(ctx),
+      openrecipe: (el) => openRecipe(ctx, el.dataset.id),
+      logrecipe: (el) => {
+        const recipe = store.state.recipes.find((r) => r.id === el.dataset.id);
+        if (!recipe) return;
+        const s = openSheet({ title: 'Log a serving' });
+        renderRecipeLog(s, ctx, { recipe, date: ctx.date(), slot: defaultSlot(), onLogged: () => s.close() });
+      },
       editmeal: (el) => {
         const meal = store.state.meals.find((m) => m.id === el.dataset.id);
         if (meal) openMealBuilder(ctx, { meal });

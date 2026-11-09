@@ -1,12 +1,13 @@
 // The "Add food" sheet: Scan, My foods, Meals, Quick add, and the amount picker.
 
-import { nutrientsForAmount, scaleNutrients, trimNum, normalizeBarcode, gtinCheckDigitValid, upceToUpca, describeAmount } from '../nutrition.js';
+import { nutrientsForAmount, scaleNutrients, trimNum, normalizeBarcode, gtinCheckDigitValid, upceToUpca, describeAmount, amountOptions, matchAmountOption, nutrientsFromBatch } from '../nutrition.js';
 import { lookupBarcode, searchUsdaFoods, fetchUsdaFood } from '../lookup.js';
 import { BarcodeScanner, decodeImageFile, describeCameraError } from '../scanner.js';
 import { openSheet, mount, esc, fmt, readNum, toast, defaultSlot, slotOptions, nutrientTable, macroLine, icon, SLOTS, amountChips, wireAmountChips } from '../ui.js';
 import { renderFoodForm, nutrientInputsHtml, readNutrients, wireCalorieHint, errorBox } from './foodform.js';
 import { openMealBuilder } from './mealbuilder.js';
 import { confirmOverGoals } from '../guard.js';
+import { renderRecipeLog, recipeSummary, sortRecipes, batchDate, openRecipe } from './recipes.js';
 
 const TABS = [
   { id: 'recent', label: 'Recent' },
@@ -89,6 +90,24 @@ export function openAdd(ctx, opts = {}) {
   // Build the diary entry for a recent item at the amount used last time.
   function repeatEntry(group) {
     const e = group.last;
+    if (e.kind === 'recipe') {
+      // Same amount, from your newest batch (or the original one if the new batch can't be logged that way).
+      const recipe = ctx.store.state.recipes.find((r) => r.id === e.recipeId);
+      const candidates = [ctx.store.latestBatch(recipe), recipe.batches.find((b) => b.id === e.batchId)].filter(Boolean);
+      for (const b of candidates) {
+        try {
+          return {
+            kind: 'recipe', recipeId: recipe.id, batchId: b.id, name: recipe.name, brand: `${batchDate(b)} batch`, qty: e.qty, unit: e.unit,
+            ...(e.unit === 'portion' ? { portionLabel: `1/${trimNum(b.shares)} of the batch` } : {}),
+            servingLabel: '', nutrients: nutrientsFromBatch(b, e.qty, e.unit),
+          };
+        } catch {
+          // try the next batch
+        }
+      }
+      const { id, date, slot, ...rest } = e;
+      return rest;
+    }
     if (e.kind === 'meal') {
       const meal = ctx.store.state.meals.find((m) => m.id === e.mealId);
       return { kind: 'meal', mealId: meal.id, name: meal.name, brand: '', qty: e.qty, unit: 'serving', servingLabel: '1 serving', nutrients: scaleNutrients(meal.perServing, e.qty) };
@@ -147,6 +166,10 @@ export function openAdd(ctx, opts = {}) {
           const back = () => showTab('recent');
           if (e.kind === 'food') showPicker({ food: ctx.store.state.foods.find((f) => f.id === e.foodId), back, initial: { qty: e.qty, unit: e.unit, portionLabel: e.portionLabel } });
           else if (e.kind === 'meal') showMealPicker(ctx.store.state.meals.find((m) => m.id === e.mealId), back, e.qty);
+          else if (e.kind === 'recipe') {
+            const recipe = ctx.store.state.recipes.find((r) => r.id === e.recipeId);
+            renderRecipeLog(sheet, ctx, { recipe, date: state.date, slot: state.slot, back, onLogged: () => sheet.close() });
+          }
           else quickLog(el, g);
         },
         quicklog: (el) => quickLog(el, groups[Number(el.dataset.i)]),
@@ -160,6 +183,7 @@ export function openAdd(ctx, opts = {}) {
     if (!(await confirmOverGoals(ctx, { date: state.date, add: [entry.nutrients] }))) return;
     if (entry.foodId && entry.kind === 'food') ctx.store.touchFood(entry.foodId);
     if (entry.mealId) ctx.store.touchMeal(entry.mealId);
+    if (entry.recipeId) ctx.store.touchRecipe(entry.recipeId);
     const rec = ctx.store.addEntry({ ...entry, date: state.date, slot: state.slot });
     const btn = el.closest('li')?.querySelector('.add-one');
     if (btn) {
@@ -297,24 +321,8 @@ export function openAdd(ctx, opts = {}) {
 
   // ---------- amount picker ----------
 
-  // Units the amount can be in: the food's USDA portions (if any), its main serving, and grams.
-  function unitOptions(food) {
-    const opts = [];
-    const portions = food.portions || [];
-    portions.forEach((p, i) => opts.push({ key: `p${i}`, unit: 'portion', portion: p, grams: p.grams, text: `${p.label} (${trimNum(p.grams, 1)} g)` }));
-    // Keep the main serving unless a portion already matches it.
-    if (!portions.some((p) => Math.abs(p.grams - (food.servingGrams || -1)) < 0.05)) {
-      opts.unshift({ key: 's', unit: 'serving', grams: food.servingGrams > 0 ? food.servingGrams : null, text: portions.length ? food.servingLabel || '1 serving' : 'Servings' });
-    }
-    if (food.servingGrams > 0) opts.push({ key: 'g', unit: 'g', grams: 1, text: 'Grams' });
-    return opts;
-  }
-
-  function matchOption(opts, amount) {
-    if (!amount) return null;
-    if (amount.unit === 'portion') return opts.find((o) => o.unit === 'portion' && o.portion.label === amount.portionLabel) || null;
-    return opts.find((o) => o.unit === amount.unit) || null;
-  }
+  const unitOptions = amountOptions;
+  const matchOption = matchAmountOption;
 
   function showPicker({ food, back, isNew = false, initial = null, note = '' }) {
     const opts = unitOptions(food);
@@ -533,6 +541,7 @@ export function openAdd(ctx, opts = {}) {
 
   function mealsPane(pane) {
     const meals = [...ctx.store.state.meals].sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0) || a.name.localeCompare(b.name));
+    const recipes = sortRecipes(ctx.store.state.recipes.filter((r) => r.batches.length));
     const build = () =>
       openMealBuilder(ctx, {
         onSaved: (meal) => {
@@ -541,21 +550,43 @@ export function openAdd(ctx, opts = {}) {
       });
     mount(
       pane,
-      meals.length
-        ? `<ul class="list">${meals
-            .map(
-              (m) => `<li><button type="button" class="row" data-act="pick" data-id="${esc(m.id)}">
-                <span class="r-main"><b>${esc(m.name)}</b><small>${m.items.length} ingredient${m.items.length === 1 ? '' : 's'}, makes ${trimNum(m.yield)}</small></span>
-                <span class="r-kcal">${fmt(m.perServing?.kcal ?? 0)}<small> kcal</small></span></button></li>`
-            )
-            .join('')}</ul>
-           <button type="button" class="btn" data-act="build">${icon.plus} Build a meal</button>`
-        : `<div class="empty"><p>Save something you make often, like your usual breakfast or a pot of chili, and log a serving of it in one tap.</p>
-           <button type="button" class="btn primary" data-act="build">Build a meal</button></div>`,
+      `${
+        recipes.length
+          ? `<h3 class="subhead">Recipes <small>log by weight</small></h3>
+             <ul class="list">${recipes
+               .map(
+                 (r) => `<li><button type="button" class="row" data-act="recipe" data-id="${esc(r.id)}">
+                   <span class="r-main"><b>${esc(r.name)}</b><small>${esc(recipeSummary(ctx, r))}</small></span></button></li>`
+               )
+               .join('')}</ul>`
+          : ''
+      }
+      <div class="btn-row"><button type="button" class="btn" data-act="newrecipe">${icon.plus} New recipe</button></div>
+      <h3 class="subhead">Meals <small>foods you log together</small></h3>
+      ${
+        meals.length
+          ? `<ul class="list">${meals
+              .map(
+                (m) => `<li><button type="button" class="row" data-act="pick" data-id="${esc(m.id)}">
+                  <span class="r-main"><b>${esc(m.name)}</b><small>${m.items.length} ingredient${m.items.length === 1 ? '' : 's'}, makes ${trimNum(m.yield)}</small></span>
+                  <span class="r-kcal">${fmt(m.perServing?.kcal ?? 0)}<small> kcal</small></span></button></li>`
+              )
+              .join('')}</ul>`
+          : '<p class="hint">Save things you eat together, like your usual breakfast, and log them in one tap.</p>'
+      }
+      <button type="button" class="btn" data-act="build">${icon.plus} Build a meal</button>`,
       {
         pick: (el) => {
           const meal = ctx.store.state.meals.find((m) => m.id === el.dataset.id);
           if (meal) showMealPicker(meal, () => showTab('meals'));
+        },
+        recipe: (el) => {
+          const recipe = ctx.store.state.recipes.find((r) => r.id === el.dataset.id);
+          if (recipe) renderRecipeLog(sheet, ctx, { recipe, date: state.date, slot: state.slot, back: () => showTab('meals'), onLogged: () => sheet.close() });
+        },
+        newrecipe: () => {
+          sheet.close();
+          openRecipe(ctx);
         },
         build,
       }

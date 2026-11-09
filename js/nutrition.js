@@ -327,6 +327,54 @@ export function describeAmount(food, qty, unit = 'serving', portionLabel = '') {
   return qty === 1 ? label : `${trimNum(qty)} \u00d7 ${label}`;
 }
 
+// The units an amount can be in: a food's portions (if any), its main serving, and grams.
+export function amountOptions(food) {
+  const opts = [];
+  const portions = food.portions || [];
+  portions.forEach((p, i) => opts.push({ key: `p${i}`, unit: 'portion', portion: p, grams: p.grams, text: `${p.label} (${trimNum(p.grams, 1)} g)` }));
+  if (!portions.some((p) => Math.abs(p.grams - (food.servingGrams || -1)) < 0.05)) {
+    opts.unshift({ key: 's', unit: 'serving', grams: food.servingGrams > 0 ? food.servingGrams : null, text: portions.length ? food.servingLabel || '1 serving' : 'Servings' });
+  }
+  if (food.servingGrams > 0) opts.push({ key: 'g', unit: 'g', grams: 1, text: 'Grams' });
+  return opts;
+}
+
+export function matchAmountOption(opts, amount) {
+  if (!amount) return null;
+  if (amount.unit === 'portion') return opts.find((o) => o.unit === 'portion' && o.portion.label === amount.portionLabel) || null;
+  return opts.find((o) => o.unit === amount.unit) || null;
+}
+
+// ---------- Batches ----------
+
+// Totals for a whole batch. Nutrients no ingredient reported stay missing.
+export function batchTotals(ingredients) {
+  const { totals, reported } = sumNutrients(ingredients.map((i) => i.nutrients));
+  const out = {};
+  for (const k of NUTRIENT_KEYS) if (reported[k] > 0) out[k] = totals[k];
+  return out;
+}
+
+// Raw weight of what went in, when every ingredient has a known weight.
+export function batchRawGrams(ingredients) {
+  let sum = 0;
+  for (const i of ingredients) {
+    if (!(i.grams > 0)) return null;
+    sum += i.grams;
+  }
+  return sum;
+}
+
+// Nutrients for eating from a batch: by grams of the cooked food, or as a share ("1 of 6 bowls").
+export function nutrientsFromBatch(batch, qty, unit = 'g') {
+  if (unit === 'g') {
+    if (!(batch.cookedGrams > 0)) throw new Error('Weigh the finished batch to log by grams.');
+    return scaleNutrients(batch.totals, qty / batch.cookedGrams);
+  }
+  const shares = batch.shares > 0 ? batch.shares : 1;
+  return scaleNutrients(batch.totals, qty / shares);
+}
+
 // Recipe: ingredients [{ food snapshot fields, servings }] and how many servings it makes.
 export function mealPerServing(items, yieldServings) {
   const scaled = items.map((it) => scaleNutrients(it.nutrients, it.servings));

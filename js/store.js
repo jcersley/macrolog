@@ -10,6 +10,8 @@ const defaults = () => ({
   settings: { units: 'us', usdaKey: '', weighDismissed: '', lastBackup: '', backupSnoozed: '' },
   foods: [], // { id, name, brand, barcode, servingLabel, servingGrams?, nutrients, source, lastUsed, uses }
   meals: [], // { id, name, yield, items: [{ name, servings, servingLabel, nutrients }], lastUsed }
+  // Batch cooking: a recipe holds dated batches, each with its own ingredients and cooked weight.
+  recipes: [], // { id, name, tareGrams, lastUsed, batches: [{ id, date, ingredients, cookedGrams, shares, totals }] }
   log: [], // { id, date, slot, name, detail, nutrients, kind }
   weights: [], // { date, kg }
   waists: [], // { date, cm }
@@ -42,6 +44,7 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
       settings: { ...d.settings, ...(s.settings || {}) },
       foods: Array.isArray(s.foods) ? s.foods : [],
       meals: Array.isArray(s.meals) ? s.meals : [],
+      recipes: Array.isArray(s.recipes) ? s.recipes : [],
       log: Array.isArray(s.log) ? s.log : [],
       weights: Array.isArray(s.weights) ? s.weights : [],
       waists: Array.isArray(s.waists) ? s.waists : [],
@@ -163,6 +166,49 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
         commit();
       }
     },
+    // ----- recipes and batches -----
+    saveRecipe(recipe) {
+      const i = recipe.id ? state.recipes.findIndex((r) => r.id === recipe.id) : -1;
+      let rec;
+      if (i >= 0) rec = state.recipes[i] = { ...state.recipes[i], ...recipe };
+      else state.recipes.push((rec = { batches: [], lastUsed: 0, ...recipe, id: recipe.id || uid() }));
+      commit();
+      return rec;
+    },
+    deleteRecipe(id) {
+      state.recipes = state.recipes.filter((r) => r.id !== id);
+      commit();
+    },
+    saveBatch(recipeId, batch) {
+      const r = state.recipes.find((x) => x.id === recipeId);
+      if (!r) return null;
+      const rec = { ...batch, id: batch.id || uid() };
+      const i = r.batches.findIndex((b) => b.id === rec.id);
+      if (i >= 0) r.batches[i] = rec;
+      else r.batches.push(rec);
+      commit();
+      return rec;
+    },
+    deleteBatch(recipeId, batchId) {
+      const r = state.recipes.find((x) => x.id === recipeId);
+      if (!r) return;
+      r.batches = r.batches.filter((b) => b.id !== batchId);
+      commit();
+    },
+    // Newest batch by the date it was made.
+    latestBatch(recipe) {
+      return [...(recipe?.batches || [])].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))[0] || null;
+    },
+    entriesForBatch(batchId) {
+      return state.log.filter((e) => e.batchId === batchId);
+    },
+    touchRecipe(id) {
+      const r = state.recipes.find((x) => x.id === id);
+      if (r) {
+        r.lastUsed = Date.now();
+        commit();
+      }
+    },
     deleteMeal(id) {
       state.meals = state.meals.filter((m) => m.id !== id);
       commit();
@@ -217,8 +263,9 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
         if ((slot && e.slot !== slot) || e.date < cutoff || e.date > today) continue;
         if (e.kind === 'food' && !state.foods.some((f) => f.id === e.foodId)) continue;
         if (e.kind === 'meal' && !state.meals.some((m) => m.id === e.mealId)) continue;
+        if (e.kind === 'recipe' && !state.recipes.some((r) => r.id === e.recipeId && r.batches.length)) continue;
         const key =
-          e.kind === 'meal' ? `m:${e.mealId}` : e.foodId ? `f:${e.foodId}` : `q:${String(e.name).toLowerCase()}|${Math.round(e.nutrients?.kcal || 0)}`;
+          e.kind === 'meal' ? `m:${e.mealId}` : e.kind === 'recipe' ? `r:${e.recipeId}` : e.foodId ? `f:${e.foodId}` : `q:${String(e.name).toLowerCase()}|${Math.round(e.nutrients?.kcal || 0)}`;
         const g = groups.get(key) || { key, count: 0, last: null };
         g.count++;
         if (!g.last || e.date >= g.last.date) g.last = e;

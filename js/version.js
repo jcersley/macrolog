@@ -1,8 +1,17 @@
 // Bump these with every release, and bump VERSION in sw.js to match (macrolog-v + the release number).
-export const APP_VERSION = '1.5.0';
-export const RELEASED = '2026-11-08';
+export const APP_VERSION = '1.6.0';
+export const RELEASED = '2026-11-09';
 
 export const CHANGELOG = [
+  {
+    version: '1.6.0',
+    date: '2026-11-09',
+    notes: [
+      'Recipes for batch cooking: enter what went in the pot, weigh the finished food, and log your bowl by weight.',
+      'Each batch is dated. "Make it again" copies the last batch so you only change what\'s different.',
+      'Log leftovers from an older batch, and fix a batch later with the option to update what you already logged.',
+    ],
+  },
   {
     version: '1.5.0',
     date: '2026-11-08',

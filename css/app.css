@@ -401,3 +401,9 @@ body.locked #toasts { top: calc(env(safe-area-inset-top) + 12px); bottom: auto; 
 .amount.portioned select { min-width: 0; }
 .portions-box { border-left: 3px solid var(--hair); padding-left: 12px; display: grid; gap: 8px; justify-items: start; }
 .seg-opt { position: relative; }
+
+/* ---------- v1.6: recipes ---------- */
+.batch-card { background: var(--panel); border: 2px solid var(--ink); padding: 12px 14px; display: grid; gap: 12px; }
+.batch-date { font-weight: 900; }
+.batch-card .link { padding-top: 0; justify-self: start; }
+.subhead small { font-weight: 600; }
