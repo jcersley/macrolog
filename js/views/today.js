@@ -120,7 +120,7 @@ export function renderToday(view, ctx) {
             ? `<ul class="entries">${list
                 .map(
                   (e) => `<li><button type="button" class="row" data-act="entry" data-id="${esc(e.id)}">
-                    <span class="r-main"><b>${esc(e.name)}</b><small>${esc([e.brand, describeAmount({ servingLabel: e.servingLabel }, e.qty, e.unit)].filter(Boolean).join(', '))}</small></span>
+                    <span class="r-main"><b>${esc(e.name)}</b><small>${esc([e.brand, describeAmount({ servingLabel: e.servingLabel }, e.qty, e.unit, e.portionLabel)].filter(Boolean).join(', '))}</small></span>
                     <span class="r-kcal">${fmt(e.nutrients.kcal || 0)}</span></button></li>`
                 )
                 .join('')}</ul>`
@@ -243,11 +243,12 @@ function openCopy(ctx, slot, date) {
 
 function openEntry(ctx, entry) {
   const s = openSheet({ title: entry.name });
-  const unitWord = entry.unit === 'g' ? 'Grams' : 'Servings';
+  const unitWord = entry.unit === 'g' ? 'Grams' : entry.unit === 'portion' ? `How many (${esc(entry.portionLabel)})` : 'Servings';
   const root = s.render(
     `${entry.brand ? `<p class="muted">${esc(entry.brand)}</p>` : ''}
     <label class="field"><span>${unitWord}</span><input id="qty" inputmode="decimal" autocomplete="off" value="${trimNum(entry.qty)}"></label>
     ${entry.unit === 'serving' ? `<p class="muted small">1 serving is ${esc(entry.servingLabel || '1 serving')}</p>` : ''}
+    ${entry.unit === 'portion' && entry.portionGrams ? `<p class="muted small">${esc(entry.portionLabel)} is ${trimNum(entry.portionGrams, 1)} g</p>` : ''}
     <div id="np"></div>
     <label class="field"><span>Meal</span><select id="slot">${slotOptions(entry.slot)}</select></label>
     <div class="btn-row">

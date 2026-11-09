@@ -2,6 +2,7 @@
 
 import { NUTRIENTS, normalizeBarcode, trimNum } from '../nutrition.js';
 import { esc, readNum, confirmSheet, toast } from '../ui.js';
+import { fetchUsdaFood } from '../lookup.js';
 
 const CORE = ['kcal', 'protein', 'carbs', 'fat'];
 const EXTRA = NUTRIENTS.filter((n) => !CORE.includes(n.key));
@@ -90,6 +91,15 @@ export function renderFoodForm(sheet, ctx, { food = null, prefill = {}, onSave, 
       <p class="hint">Add the weight to log this food by the gram later. Labels print it next to the serving size, like "1 cup (227g)".</p>
       <h3 class="subhead">Per serving</h3>
       ${nutrientInputsHtml(f.nutrients)}
+      ${
+        f.fdcId
+          ? `<div class="portions-box">
+               <h3 class="subhead">USDA portion sizes</h3>
+               <p class="hint" id="portion-list">${portionSummary(f.portions)}</p>
+               ${editing ? `<button type="button" class="btn small" data-act="portions">${f.portions?.length ? 'Refresh from USDA' : 'Get portion sizes from USDA'}</button>` : ''}
+             </div>`
+          : ''
+      }
       <label class="field"><span>Barcode <small>optional</small></span><input id="f-barcode" inputmode="numeric" autocomplete="off" value="${esc(f.barcode || '')}"></label>
       <div class="btn-row">
         <button type="submit" class="btn primary">Save food</button>
@@ -123,9 +133,31 @@ export function renderFoodForm(sheet, ctx, { food = null, prefill = {}, onSave, 
           servingGrams: grams > 0 ? grams : undefined,
           nutrients,
           source: f.source || 'Entered by hand',
+          ...(f.fdcId ? { fdcId: f.fdcId } : {}),
+          ...(f.portions?.length ? { portions: f.portions } : {}),
         });
         toast(editing ? 'Food updated' : 'Saved to your foods');
         onSave?.(saved);
+      },
+      portions: async (el) => {
+        el.disabled = true;
+        el.textContent = 'Loading\u2026';
+        try {
+          const detail = await fetchUsdaFood(f.fdcId, ctx.store.state.settings.usdaKey);
+          const portions = detail?.portions || [];
+          if (!portions.length) {
+            toast('USDA lists no portion sizes for this food');
+          } else {
+            f.portions = portions;
+            ctx.store.saveFood({ id: f.id, portions });
+            root.querySelector('#portion-list').innerHTML = portionSummary(portions);
+            toast(`Added ${portions.length} portion size${portions.length === 1 ? '' : 's'}`);
+          }
+        } catch (err) {
+          toast(err.name === 'TypeError' ? "Couldn't reach USDA. Check your connection." : err.message);
+        }
+        el.disabled = false;
+        el.textContent = 'Refresh from USDA';
       },
       delete: async () => {
         const ok = await confirmSheet({
@@ -145,4 +177,9 @@ export function renderFoodForm(sheet, ctx, { food = null, prefill = {}, onSave, 
   if (!f.name) root.querySelector('#f-name').setAttribute('autofocus', '');
   sheet.focus();
   return root;
+}
+
+function portionSummary(portions) {
+  if (!portions?.length) return 'None saved yet. These let you log by "1 large", "1 cup" and so on.';
+  return esc(portions.map((p) => `${p.label} (${trimNum(p.grams, 1)} g)`).join(', '));
 }

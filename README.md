@@ -13,6 +13,12 @@ A personal calorie and macro tracker that runs as a web app on your iPhone's Hom
 - **Monday weigh-in:** the first time you open the app on a Monday, it asks for your weight. "Not today" skips it until next week.
 - **Backup:** export and restore from Profile, with a reminder every 30 days.
 
+### Added in version 1.5
+
+- **USDA portion sizes:** when you pick a food from a USDA search, the app fetches every portion size USDA lists for it (the same choices as the dropdown on USDA's website). The amount screen gets a **Portion** menu, like "1 large (50 g)", "1 cup (243 g)" or Grams, and defaults to the first real portion instead of 100 g. Switching portions keeps the same total, so 100 g of egg becomes 2 large. The portions are saved with the food and the app remembers which one you used.
+- **Older USDA foods:** open the food in the Foods tab and tap **Get portion sizes from USDA**.
+- Picking a USDA food now uses two lookups (search, then portions), so a free personal USDA key is strongly recommended.
+
 ### Added in version 1.4
 
 - **Custom calorie goal:** in **Profile > Calorie goal**, choose **Custom** and type a number. Macros and nutrient goals follow it.

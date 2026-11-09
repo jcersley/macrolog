@@ -55,3 +55,13 @@ test('charts produce valid SVG without NaN', () => {
   assert.match(bars, /bar over/);
   assert.doesNotMatch(bars, /NaN|undefined/);
 });
+
+test('partial food updates keep the rest of the record and its usage', () => {
+  const s = createStore({ storage: memory() });
+  const f = s.saveFood({ name: 'Eggs', servingLabel: '100 g', servingGrams: 100, nutrients: { kcal: 148 } });
+  s.touchFood(f.id);
+  const merged = s.saveFood({ id: f.id, portions: [{ label: '1 large', grams: 50 }] });
+  assert.equal(merged.name, 'Eggs');
+  assert.equal(merged.uses, 1);
+  assert.equal(merged.portions.length, 1);
+});

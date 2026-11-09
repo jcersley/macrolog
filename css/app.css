@@ -395,3 +395,9 @@ body.locked #toasts { top: calc(env(safe-area-inset-top) + 12px); bottom: auto; 
 .need.met { color: var(--muted); }
 .need.met::after { content: " \2713"; }
 .stats.two-col { grid-template-columns: repeat(2, 1fr); }
+
+/* ---------- v1.5: portions ---------- */
+.amount.portioned { grid-template-columns: 96px 1fr; }
+.amount.portioned select { min-width: 0; }
+.portions-box { border-left: 3px solid var(--hair); padding-left: 12px; display: grid; gap: 8px; justify-items: start; }
+.seg-opt { position: relative; }

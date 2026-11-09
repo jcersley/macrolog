@@ -45,11 +45,11 @@ test('recent foods are per meal, most frequent first, with the latest amount', (
 
 test('last amount remembers quantity and unit', () => {
   const { s, eggs, toast } = seeded();
-  assert.deepEqual(s.lastAmount(eggs.id), { qty: 2, unit: 'serving' });
+  assert.deepEqual(s.lastAmount(eggs.id), { qty: 2, unit: 'serving', portionLabel: '' });
   s.addEntry({ date: '2026-11-08', slot: 'breakfast', kind: 'food', foodId: eggs.id, name: 'Eggs', qty: 120, unit: 'g', nutrients: {} });
-  assert.deepEqual(s.lastAmount(eggs.id), { qty: 120, unit: 'g' });
+  assert.deepEqual(s.lastAmount(eggs.id), { qty: 120, unit: 'g', portionLabel: '' });
   assert.equal(s.lastAmount('nope'), null);
-  assert.deepEqual(s.lastAmount(toast.id), { qty: 2, unit: 'serving' });
+  assert.deepEqual(s.lastAmount(toast.id), { qty: 2, unit: 'serving', portionLabel: '' });
 });
 
 test('batch add and delete for copying a meal', () => {

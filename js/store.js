@@ -125,11 +125,12 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
       const want = normalizeBarcode(code);
       return want ? state.foods.find((f) => normalizeBarcode(f.barcode) === want) : undefined;
     },
+    // New food, or a partial update of an existing one. Returns the full saved record.
     saveFood(food) {
-      const rec = { uses: 0, lastUsed: 0, ...food, id: food.id || uid() };
-      const i = state.foods.findIndex((f) => f.id === rec.id);
-      if (i >= 0) state.foods[i] = { ...state.foods[i], ...rec };
-      else state.foods.push(rec);
+      const i = food.id ? state.foods.findIndex((f) => f.id === food.id) : -1;
+      let rec;
+      if (i >= 0) rec = state.foods[i] = { ...state.foods[i], ...food };
+      else state.foods.push((rec = { uses: 0, lastUsed: 0, ...food, id: food.id || uid() }));
       commit();
       return rec;
     },
@@ -203,7 +204,7 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
     lastAmount(foodId) {
       for (let i = state.log.length - 1; i >= 0; i--) {
         const e = state.log[i];
-        if (e.foodId === foodId && e.kind === 'food' && e.qty > 0) return { qty: e.qty, unit: e.unit || 'serving' };
+        if (e.foodId === foodId && e.kind === 'food' && e.qty > 0) return { qty: e.qty, unit: e.unit || 'serving', portionLabel: e.portionLabel || '' };
       }
       return null;
     },

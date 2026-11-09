@@ -158,26 +158,86 @@ function readFoodNutrients(list) {
 
 const GENERIC_TYPES = 'Foundation,SR Legacy,Survey (FNDDS)';
 
-// Generic foods report nutrients per 100 g. Use the first real household measure as the serving.
+// ---------- Portions ----------
+
+const QNS = /quantity not specified/i;
+const trimAmt = (n) => String(Number(n.toFixed(2)));
+
+// USDA words portions differently per dataset:
+//   Foundation: amount + measureUnit + modifier (e.g. 1, "cup", "chopped")
+//   SR Legacy: amount + modifier, unit "undetermined" (e.g. 1, "large")
+//   Survey (FNDDS): portionDescription holds the household measure; modifier is a numeric code
+//   Search results: foodMeasures with disseminationText
+export function usdaPortionLabel(p) {
+  if (p.disseminationText !== undefined) return String(p.disseminationText || '').trim();
+  const desc = String(p.portionDescription || '').trim();
+  const mod = String(p.modifier || '').trim();
+  const modIsCode = /^\d+$/.test(mod);
+  const unit = String(p.measureUnit?.name || '').trim();
+  const unitOk = unit && !/^undetermined$/i.test(unit);
+  const amt = num(p.amount);
+  if (desc && !QNS.test(desc) && (!mod || modIsCode) && !unitOk) return desc;
+  const parts = [];
+  if (amt > 0) parts.push(trimAmt(amt));
+  if (unitOk) parts.push(unit);
+  if (mod && !modIsCode) parts.push(mod);
+  let label = parts.join(' ');
+  if (desc && !QNS.test(desc) && !label.toLowerCase().includes(desc.toLowerCase())) label = label ? `${label}, ${desc}` : desc;
+  return label;
+}
+
+// All usable portions for a USDA food, in USDA's order, without duplicates or "quantity not specified".
+export function parseUsdaPortions(food) {
+  const raw = [...(food.foodPortions || []), ...(food.foodMeasures || [])];
+  const ordered = raw
+    .map((p, i) => ({ p, order: num(p.sequenceNumber) ?? num(p.rank) ?? 1000 + i, i }))
+    .sort((a, b) => a.order - b.order || a.i - b.i);
+  const seen = new Set();
+  const out = [];
+  for (const { p } of ordered) {
+    const grams = num(p.gramWeight);
+    const label = usdaPortionLabel(p);
+    // Skip "quantity not specified" and labels with no words (a bare "1" tells you nothing).
+    if (!(grams > 0) || !label || QNS.test(label) || QNS.test(p.portionDescription || '') || /^[\d.\s]+$/.test(label)) continue;
+    const key = `${label.toLowerCase()}|${rnd(grams, 1)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ label, grams: rnd(grams, 1) });
+    if (out.length >= 15) break;
+  }
+  return out;
+}
+
+// Generic foods report nutrients per 100 g. The first USDA portion becomes the main serving.
 export function parseUsdaGeneric(food) {
   const per100 = readFoodNutrients(food.foodNutrients);
   if (per100.kcal === undefined) return null;
-  const measure = (food.foodMeasures || []).find(
-    (m) => num(m.gramWeight) > 0 && String(m.disseminationText || '').trim() && !/quantity not specified/i.test(m.disseminationText)
-  );
-  const grams = measure ? num(measure.gramWeight) : 100;
+  const portions = parseUsdaPortions(food);
+  const main = portions[0];
+  const grams = main ? main.grams : 100;
   const nutrients = {};
   for (const [k, v] of Object.entries(per100)) nutrients[k] = (v * grams) / 100;
   return {
     name: titleCase(food.description) || 'Unnamed food',
     brand: '',
     barcode: '',
-    servingLabel: measure ? `${String(measure.disseminationText).trim()} (${rnd(grams, 1)} g)` : '100 g',
+    servingLabel: main ? `${main.label} (${rnd(grams, 1)} g)` : '100 g',
     servingGrams: grams,
     nutrients: finish(nutrients),
+    ...(portions.length ? { portions } : {}),
     source: 'USDA FoodData Central',
     fdcId: food.fdcId,
   };
+}
+
+// Full record for one food, including every portion size USDA lists (the dropdown on USDA's site).
+export async function fetchUsdaFood(fdcId, apiKey, { fetchFn = fetch, signal } = {}) {
+  const url = `https://api.nal.usda.gov/fdc/v1/food/${encodeURIComponent(fdcId)}?api_key=${encodeURIComponent(apiKey || 'DEMO_KEY')}`;
+  const res = await fetchFn(url, { signal });
+  if (res.status === 429) throw new Error('USDA rate limit reached. Add your own free API key in Profile.');
+  if (res.status === 403 || res.status === 401) throw new Error('USDA rejected the API key. Check it in Profile.');
+  if (!res.ok) throw new Error(`USDA returned ${res.status}`);
+  return parseUsdaGeneric(await res.json());
 }
 
 export function parseUsdaGenericSearch(json) {

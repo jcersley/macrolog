@@ -311,20 +311,20 @@ export function totalsForEntries(entries) {
   return sumNutrients(entries.map((e) => e.nutrients));
 }
 
-// Nutrients for eating `qty` of a food. unit: 'serving' | 'g'
-export function nutrientsForAmount(food, qty, unit = 'serving') {
-  let factor = qty;
-  if (unit === 'g') {
-    if (!food.servingGrams) throw new Error('This food has no gram weight for a serving.');
-    factor = qty / food.servingGrams;
-  }
-  return scaleNutrients(food.nutrients, factor);
+// Nutrients for eating `qty` of a food.
+// unit: 'serving' (the food's main serving), 'g', or 'portion' (one of the food's portions: { label, grams }).
+export function nutrientsForAmount(food, qty, unit = 'serving', portion = null) {
+  if (unit === 'serving') return scaleNutrients(food.nutrients, qty);
+  if (!food.servingGrams) throw new Error('This food has no gram weight for a serving.');
+  const per = unit === 'g' ? 1 : portion?.grams;
+  if (!(per > 0)) throw new Error('Unknown portion.');
+  return scaleNutrients(food.nutrients, (qty * per) / food.servingGrams);
 }
 
-export function describeAmount(food, qty, unit = 'serving') {
+export function describeAmount(food, qty, unit = 'serving', portionLabel = '') {
   if (unit === 'g') return `${trimNum(qty)} g`;
-  const label = food.servingLabel || '1 serving';
-  return qty === 1 ? label : `${trimNum(qty)} × ${label}`;
+  const label = unit === 'portion' && portionLabel ? portionLabel : food.servingLabel || '1 serving';
+  return qty === 1 ? label : `${trimNum(qty)} \u00d7 ${label}`;
 }
 
 // Recipe: ingredients [{ food snapshot fields, servings }] and how many servings it makes.

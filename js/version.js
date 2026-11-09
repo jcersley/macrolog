@@ -1,8 +1,17 @@
 // Bump these with every release, and bump VERSION in sw.js to match (macrolog-v + the release number).
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 export const RELEASED = '2026-11-08';
 
 export const CHANGELOG = [
+  {
+    version: '1.5.0',
+    date: '2026-11-08',
+    notes: [
+      'USDA foods come with all of USDA\'s portion sizes, like "1 large" egg or "1 cup", picked from a Portion menu when you log.',
+      'USDA foods default to their first real portion instead of 100 g.',
+      'Foods saved from USDA earlier can get their portion sizes from the food\'s edit screen.',
+    ],
+  },
   {
     version: '1.4.0',
     date: '2026-11-08',

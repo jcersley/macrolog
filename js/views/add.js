@@ -1,7 +1,7 @@
 // The "Add food" sheet: Scan, My foods, Meals, Quick add, and the amount picker.
 
-import { nutrientsForAmount, scaleNutrients, trimNum, normalizeBarcode, gtinCheckDigitValid, upceToUpca } from '../nutrition.js';
-import { lookupBarcode, searchUsdaFoods } from '../lookup.js';
+import { nutrientsForAmount, scaleNutrients, trimNum, normalizeBarcode, gtinCheckDigitValid, upceToUpca, describeAmount } from '../nutrition.js';
+import { lookupBarcode, searchUsdaFoods, fetchUsdaFood } from '../lookup.js';
 import { BarcodeScanner, decodeImageFile, describeCameraError } from '../scanner.js';
 import { openSheet, mount, esc, fmt, readNum, toast, defaultSlot, slotOptions, nutrientTable, macroLine, icon, SLOTS, amountChips, wireAmountChips } from '../ui.js';
 import { renderFoodForm, nutrientInputsHtml, readNutrients, wireCalorieHint, errorBox } from './foodform.js';
@@ -95,9 +95,20 @@ export function openAdd(ctx, opts = {}) {
     }
     if (e.kind === 'food') {
       const food = ctx.store.state.foods.find((f) => f.id === e.foodId);
-      const unit = e.unit === 'g' && food.servingGrams > 0 ? 'g' : 'serving';
-      const qty = unit === e.unit ? e.qty : 1;
-      return { kind: 'food', foodId: food.id, name: food.name, brand: food.brand || '', qty, unit, servingLabel: food.servingLabel, nutrients: nutrientsForAmount(food, qty, unit) };
+      let unit = e.unit || 'serving';
+      let qty = e.qty;
+      let portion = null;
+      if (unit === 'portion') {
+        portion = (food.portions || []).find((p) => p.label === e.portionLabel) || null;
+        if (!portion || !(food.servingGrams > 0)) unit = 'serving';
+      } else if (unit === 'g' && !(food.servingGrams > 0)) unit = 'serving';
+      if (unit !== (e.unit || 'serving')) qty = 1;
+      return {
+        kind: 'food', foodId: food.id, name: food.name, brand: food.brand || '', qty, unit,
+        ...(portion ? { portionLabel: portion.label, portionGrams: portion.grams } : {}),
+        servingLabel: food.servingLabel,
+        nutrients: nutrientsForAmount(food, qty, unit, portion),
+      };
     }
     const { id, date, slot, ...rest } = e;
     return rest;
@@ -109,7 +120,8 @@ export function openAdd(ctx, opts = {}) {
     if (anyMeal) groups = ctx.store.recentFor(null);
     const amount = (g) => {
       const e = repeatEntry(g);
-      return `${e.unit === 'g' ? `${trimNum(e.qty)} g` : `${trimNum(e.qty)} serving${e.qty === 1 ? '' : 's'}`}, ${fmt(e.nutrients.kcal || 0)} kcal`;
+      const amt = e.unit === 'portion' ? describeAmount({}, e.qty, 'portion', e.portionLabel) : e.unit === 'g' ? `${trimNum(e.qty)} g` : `${trimNum(e.qty)} serving${e.qty === 1 ? '' : 's'}`;
+      return `${amt}, ${fmt(e.nutrients.kcal || 0)} kcal`;
     };
     mount(
       pane,
@@ -133,7 +145,7 @@ export function openAdd(ctx, opts = {}) {
           const g = groups[Number(el.dataset.i)];
           const e = repeatEntry(g);
           const back = () => showTab('recent');
-          if (e.kind === 'food') showPicker({ food: ctx.store.state.foods.find((f) => f.id === e.foodId), back, initial: { qty: e.qty, unit: e.unit } });
+          if (e.kind === 'food') showPicker({ food: ctx.store.state.foods.find((f) => f.id === e.foodId), back, initial: { qty: e.qty, unit: e.unit, portionLabel: e.portionLabel } });
           else if (e.kind === 'meal') showMealPicker(ctx.store.state.meals.find((m) => m.id === e.mealId), back, e.qty);
           else quickLog(el, g);
         },
@@ -285,26 +297,57 @@ export function openAdd(ctx, opts = {}) {
 
   // ---------- amount picker ----------
 
-  function showPicker({ food, back, isNew = false, initial = null }) {
-    const canGrams = food.servingGrams > 0;
+  // Units the amount can be in: the food's USDA portions (if any), its main serving, and grams.
+  function unitOptions(food) {
+    const opts = [];
+    const portions = food.portions || [];
+    portions.forEach((p, i) => opts.push({ key: `p${i}`, unit: 'portion', portion: p, grams: p.grams, text: `${p.label} (${trimNum(p.grams, 1)} g)` }));
+    // Keep the main serving unless a portion already matches it.
+    if (!portions.some((p) => Math.abs(p.grams - (food.servingGrams || -1)) < 0.05)) {
+      opts.unshift({ key: 's', unit: 'serving', grams: food.servingGrams > 0 ? food.servingGrams : null, text: portions.length ? food.servingLabel || '1 serving' : 'Servings' });
+    }
+    if (food.servingGrams > 0) opts.push({ key: 'g', unit: 'g', grams: 1, text: 'Grams' });
+    return opts;
+  }
+
+  function matchOption(opts, amount) {
+    if (!amount) return null;
+    if (amount.unit === 'portion') return opts.find((o) => o.unit === 'portion' && o.portion.label === amount.portionLabel) || null;
+    return opts.find((o) => o.unit === amount.unit) || null;
+  }
+
+  function showPicker({ food, back, isNew = false, initial = null, note = '' }) {
+    const opts = unitOptions(food);
     const last = initial || (isNew ? null : ctx.store.lastAmount(food.id));
-    let unit = last?.unit === 'g' && canGrams ? 'g' : 'serving';
-    const startQty = last && last.unit === unit ? last.qty : 1;
+    const lastOpt = matchOption(opts, last);
+    let cur = lastOpt || opts[0];
+    const startQty = lastOpt ? last.qty : 1;
+    const useSelect = opts.length > 2 || (food.portions || []).length > 0;
+    const hintFor = (o) =>
+      o.unit === 'g' ? '' : o.unit === 'portion' ? `${o.portion.label} is ${trimNum(o.grams, 1)} g` : `1 serving is ${food.servingLabel || '1 serving'}`;
+
     sheet.setTitle(isNew ? 'Found it' : 'How much?');
     sheet.showBack(back || null);
     const root = sheet.render(
       `<h3 class="food-name">${esc(food.name)}</h3>
       ${food.brand ? `<p class="muted">${esc(food.brand)}</p>` : ''}
       ${isNew ? `<p class="source">From ${esc(food.source)}. It'll be saved to your foods when you log it. Numbers look off? Tap Edit to fix them first.</p>` : ''}
-      <div class="amount">
-        <label class="field"><span>Amount</span><input id="qty" inputmode="decimal" autocomplete="off" value="${trimNum(startQty)}"></label>
-        <div class="seg" role="group" aria-label="Unit">
-          <button type="button" data-act="unit" data-unit="serving" aria-pressed="${unit === 'serving'}">Servings</button>
-          ${canGrams ? `<button type="button" data-act="unit" data-unit="g" aria-pressed="${unit === 'g'}">Grams</button>` : ''}
-        </div>
-      </div>
-      <div id="chips"${unit === 'g' ? ' hidden' : ''}>${amountChips(startQty)}</div>
-      <p class="muted small">1 serving is ${esc(food.servingLabel || '1 serving')}${last && !initial ? `. Filled in with what you had last time.` : ''}</p>
+      ${note ? `<p class="hint">${esc(note)}</p>` : ''}
+      ${
+        useSelect
+          ? `<div class="amount portioned">
+               <label class="field"><span>Amount</span><input id="qty" inputmode="decimal" autocomplete="off" value="${trimNum(startQty)}"></label>
+               <label class="field"><span>Portion</span><select id="unit">${opts.map((o) => `<option value="${o.key}"${o === cur ? ' selected' : ''}>${esc(o.text)}</option>`).join('')}</select></label>
+             </div>`
+          : `<div class="amount">
+               <label class="field"><span>Amount</span><input id="qty" inputmode="decimal" autocomplete="off" value="${trimNum(startQty)}"></label>
+               <div class="seg" role="group" aria-label="Unit">
+                 ${opts.map((o) => `<button type="button" data-act="unit" data-key="${o.key}" aria-pressed="${o === cur}">${esc(o.text)}</button>`).join('')}
+               </div>
+             </div>`
+      }
+      <div id="chips"${cur.unit === 'g' ? ' hidden' : ''}>${amountChips(startQty)}</div>
+      <p class="muted small"><span id="unit-hint">${esc(hintFor(cur))}</span>${lastOpt && !initial ? `${hintFor(cur) ? '. ' : ''}Filled in with what you had last time.` : ''}</p>
       <div id="preview"></div>
       <label class="field"><span>Meal</span><select id="slot">${slotOptions(state.slot)}</select></label>
       <div class="btn-row">
@@ -312,16 +355,7 @@ export function openAdd(ctx, opts = {}) {
         <button type="button" class="btn" data-act="edit">Edit</button>
       </div>`,
       {
-        unit: (el) => {
-          const next = el.dataset.unit;
-          if (next === unit) return;
-          const q = readNum(qtyEl);
-          if (q > 0) qtyEl.value = trimNum(next === 'g' ? q * food.servingGrams : q / food.servingGrams, next === 'g' ? 0 : 2);
-          unit = next;
-          root.querySelectorAll('[data-act="unit"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.unit === unit)));
-          root.querySelector('#chips').hidden = unit === 'g';
-          update();
-        },
+        unit: (el) => switchTo(opts.find((o) => o.key === el.dataset.key)),
         edit: () =>
           renderFoodForm(sheet, ctx, {
             food,
@@ -332,10 +366,17 @@ export function openAdd(ctx, opts = {}) {
           const q = readNum(qtyEl);
           if (!(q > 0)) return update();
           state.slot = root.querySelector('#slot').value;
-          const nutrients = nutrientsForAmount(food, q, unit);
+          const nutrients = nutrientsForAmount(food, q, cur.unit, cur.portion);
+          const unit = cur.unit;
+          const portion = cur.portion;
           confirmOverGoals(ctx, { date: state.date, add: [nutrients] }).then((ok) => {
             if (!ok) return;
-            const saved = ctx.store.state.foods.some((x) => x.id === food.id) ? food : ctx.store.saveFood(food);
+            // Picking a USDA food you've saved before reuses it (and refreshes its portions) instead of duplicating it.
+            const sameUsda = !food.id && food.fdcId ? ctx.store.state.foods.find((x) => x.fdcId === food.fdcId) : null;
+            let saved;
+            if (ctx.store.state.foods.some((x) => x.id === food.id)) saved = food;
+            else if (sameUsda) saved = ctx.store.saveFood({ id: sameUsda.id, ...(food.portions ? { portions: food.portions } : {}) });
+            else saved = ctx.store.saveFood(food);
             ctx.store.touchFood(saved.id);
             const rec = ctx.store.addEntry({
               date: state.date,
@@ -346,6 +387,7 @@ export function openAdd(ctx, opts = {}) {
               brand: saved.brand || '',
               qty: q,
               unit,
+              ...(portion ? { portionLabel: portion.label, portionGrams: portion.grams } : {}),
               servingLabel: saved.servingLabel,
               nutrients,
             });
@@ -357,9 +399,28 @@ export function openAdd(ctx, opts = {}) {
     );
     const qtyEl = root.querySelector('#qty');
     const preview = root.querySelector('#preview');
+
+    // Switching keeps the same total weight when both units have one, so 100 g of egg becomes 2 large.
+    function switchTo(next) {
+      if (!next || next === cur) return;
+      const q = readNum(qtyEl);
+      if (q > 0 && cur.grams > 0 && next.grams > 0) {
+        const v = (q * cur.grams) / next.grams;
+        qtyEl.value = trimNum(v, next.unit === 'g' ? 0 : 2);
+      } else {
+        qtyEl.value = next.unit === 'g' && next.grams ? trimNum(cur.grams || 100, 0) : '1';
+      }
+      cur = next;
+      root.querySelectorAll('[data-act="unit"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.key === cur.key)));
+      root.querySelector('#chips').hidden = cur.unit === 'g';
+      root.querySelector('#unit-hint').textContent = hintFor(cur);
+      qtyEl.dispatchEvent(new Event('input'));
+    }
+    root.querySelector('#unit')?.addEventListener('change', (e) => switchTo(opts.find((o) => o.key === e.target.value)));
+
     function update() {
       const q = readNum(qtyEl);
-      preview.innerHTML = q > 0 ? previewHtml(nutrientsForAmount(food, q, unit)) : '<p class="err-text">Enter an amount above 0.</p>';
+      preview.innerHTML = q > 0 ? previewHtml(nutrientsForAmount(food, q, cur.unit, cur.portion)) : '<p class="err-text">Enter an amount above 0.</p>';
     }
     wireAmountChips(root, qtyEl, update);
     update();
@@ -384,10 +445,27 @@ export function openAdd(ctx, opts = {}) {
           if (food) showPicker({ food, back: () => showTab('library') });
         },
         usda: () => runUsda(),
-        usdapick: (el) => {
+        usdapick: async (el) => {
           const food = usdaResults[Number(el.dataset.i)];
+          if (!food) return;
           const q = qEl.value;
-          if (food) showPicker({ food, isNew: true, back: () => showTab('library', q) });
+          const back = () => showTab('library', q);
+          if (!food.fdcId) return showPicker({ food, isNew: true, back });
+          // Fetch the full record for every portion size USDA lists.
+          const token = ++lookupToken;
+          sheet.setTitle('Loading portions');
+          sheet.showBack(back);
+          sheet.render('<div class="working"><span class="spinner" aria-hidden="true"></span><p>Getting portion sizes from USDA\u2026</p></div>');
+          let full = food;
+          let note = '';
+          try {
+            const detail = await fetchUsdaFood(food.fdcId, ctx.store.state.settings.usdaKey);
+            if (detail) full = { ...detail, name: food.name };
+          } catch (err) {
+            note = `Couldn't load all of USDA's portion sizes (${err.name === 'TypeError' ? 'no connection' : err.message}). Showing the basic ones.`;
+          }
+          if (token !== lookupToken || sheet.closed) return;
+          showPicker({ food: full, isNew: true, back, note });
         },
         new: () =>
           renderFoodForm(sheet, ctx, {
@@ -433,7 +511,7 @@ export function openAdd(ctx, opts = {}) {
              <ul class="list">${results
                .map(
                  (f, i) => `<li><button type="button" class="row" data-act="usdapick" data-i="${i}">
-                   <span class="r-main wrap"><b>${esc(f.name)}</b><small>${esc(f.servingLabel)}</small></span>
+                   <span class="r-main wrap"><b>${esc(f.name)}</b><small>${f.portions?.length ? esc(f.servingLabel) : 'Per 100 g. Tap for portion sizes.'}</small></span>
                    <span class="r-kcal">${fmt(f.nutrients.kcal ?? 0)}<small> kcal</small></span></button></li>`
                )
                .join('')}</ul>
