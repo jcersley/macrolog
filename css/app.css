@@ -345,3 +345,10 @@ select { -webkit-appearance: none; appearance: none; background-image: linear-gr
 .r-main.wrap b, .r-main.wrap small { white-space: normal; }
 .working.small-work { padding: 16px 0; }
 body.locked #toasts { top: calc(env(safe-area-inset-top) + 12px); bottom: auto; }
+.about { display: grid; gap: 0; margin: 0; }
+.about > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--hair); }
+.about > div:first-child { border-top: 0; }
+.about dt { font-weight: 700; }
+.about dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.notes { margin: 6px 0 4px; padding-left: 20px; font-size: 0.9375rem; }
+.notes li + li { margin-top: 3px; }

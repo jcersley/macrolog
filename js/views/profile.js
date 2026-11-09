@@ -5,6 +5,7 @@ import {
 } from '../nutrition.js';
 import { esc, fmt, mount, toast, readNum, fmtWeight, confirmSheet, longDate } from '../ui.js';
 import { exportBackup } from '../backup.js';
+import { APP_VERSION, RELEASED, CHANGELOG } from '../version.js';
 
 const RATES = {
   us: [0, 0.5, 1, 1.5, 2].map((lb) => ({ kg: lbToKg(lb), label: lb ? `${lb} lb a week` : 'Maintain my weight' })),
@@ -74,6 +75,16 @@ export function renderProfile(view, ctx) {
       <h3 class="subhead">Install on iPhone</h3>
       <p class="hint">In Safari, tap the Share button, then Add to Home Screen. It opens full screen like an app and works offline, except for barcode lookups.</p>
       <button type="button" class="btn danger" data-act="reset">Erase all data</button>
+    </section>
+    <section class="panel" aria-labelledby="h-about"><h2 id="h-about">About</h2>
+      <dl class="about">
+        <div><dt>Version</dt><dd>${APP_VERSION}</dd></div>
+        <div><dt>Released</dt><dd>${esc(longDate(RELEASED).split(', ').slice(1).join(', '))}, ${RELEASED.slice(0, 4)}</dd></div>
+        ${store.state.settings.versionSince ? `<div><dt>On this phone since</dt><dd>${esc(longDate(store.state.settings.versionSince).split(', ').slice(1).join(', '))}, ${store.state.settings.versionSince.slice(0, 4)}</dd></div>` : ''}
+      </dl>
+      <details class="why"><summary>What's new</summary>
+        ${CHANGELOG.map((c) => `<h3 class="subhead">${c.version}</h3><ul class="notes">${c.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>`).join('')}
+      </details>
     </section>`,
     {
       units: (el) => {

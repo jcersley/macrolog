@@ -49,7 +49,9 @@ The app uses a shared demo key that only allows a few dozen lookups an hour. A f
 3. Click **Commit changes** and wait for the green check under **Deployments** (a minute or two).
 4. Close the app on your phone completely, then open it again. If it shows "An update is ready", tap **Reload**.
 
-Each new version changes `VERSION` in `sw.js` (`macrolog-v2`, `v3`...). That's what tells phones to fetch the new files. If you edit files yourself, bump it too.
+Each new version changes `VERSION` in `sw.js` (`macrolog-v2`, `v3`...). That's what tells phones to fetch the new files. If you edit files yourself, bump it too, and update `js/version.js` (the version number, release date and notes shown under Profile > About).
+
+To confirm your phone has the new version, check **Profile > About**.
 
 ## Things to know
 

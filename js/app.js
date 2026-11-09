@@ -4,6 +4,7 @@ import { createStore } from './store.js';
 import { dateKey, shouldPromptWeighIn } from './nutrition.js';
 import { toast, openSheet } from './ui.js';
 import { shouldPromptBackup, snoozeDate, firstLogDate, exportBackup } from './backup.js';
+import { APP_VERSION } from './version.js';
 import { renderToday } from './views/today.js';
 import { renderFoods } from './views/foods.js';
 import { renderProgress, openWeightSheet } from './views/progress.js';
@@ -122,6 +123,9 @@ function onResume() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') onResume();
 });
+
+// Note the date this phone first ran the current version.
+if (store.state.settings.appVersion !== APP_VERSION) store.setSettings({ appVersion: APP_VERSION, versionSince: dateKey() });
 
 render();
 prompts();
