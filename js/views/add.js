@@ -1,18 +1,20 @@
 // The "Add food" sheet: Scan, My foods, Meals, Quick add, and the amount picker.
 
 import { nutrientsForAmount, scaleNutrients, trimNum, normalizeBarcode, gtinCheckDigitValid, upceToUpca } from '../nutrition.js';
-import { lookupBarcode } from '../lookup.js';
+import { lookupBarcode, searchUsdaFoods } from '../lookup.js';
 import { BarcodeScanner, decodeImageFile, describeCameraError } from '../scanner.js';
-import { openSheet, mount, esc, fmt, readNum, toast, defaultSlot, slotOptions, nutrientTable, macroLine, icon } from '../ui.js';
+import { openSheet, mount, esc, fmt, readNum, toast, defaultSlot, slotOptions, nutrientTable, macroLine, icon, SLOTS, amountChips, wireAmountChips } from '../ui.js';
 import { renderFoodForm, nutrientInputsHtml, readNutrients, wireCalorieHint, errorBox } from './foodform.js';
 import { openMealBuilder } from './mealbuilder.js';
 
 const TABS = [
+  { id: 'recent', label: 'Recent' },
   { id: 'scan', label: 'Scan' },
-  { id: 'library', label: 'My foods' },
+  { id: 'library', label: 'Foods' },
   { id: 'meals', label: 'Meals' },
-  { id: 'quick', label: 'Quick add' },
+  { id: 'quick', label: 'Quick' },
 ];
+const slotLabel = (id) => SLOTS.find((s) => s.id === id)?.label || 'Snacks';
 
 export function sortFoods(foods, query = '') {
   const q = query.trim().toLowerCase();
@@ -62,11 +64,11 @@ export function openAdd(ctx, opts = {}) {
 
   // ---------- tabs ----------
 
-  function showTab(tab) {
+  function showTab(tab, query = '') {
     stopScanner();
     lookupToken++;
     if (ctx.store.state.settings.addTab !== tab) ctx.store.setSettings({ addTab: tab });
-    sheet.setTitle('Add food');
+    sheet.setTitle(`Add to ${slotLabel(state.slot).toLowerCase()}`);
     sheet.showBack(null);
     const root = sheet.render(
       `<div class="seg tabs" role="tablist" aria-label="How to add">
@@ -76,7 +78,80 @@ export function openAdd(ctx, opts = {}) {
       { tab: (el) => showTab(el.dataset.tab) }
     );
     const pane = root.querySelector('#pane');
-    ({ scan: scanPane, library: libraryPane, meals: mealsPane, quick: quickPane })[tab](pane);
+    ({ recent: recentPane, scan: scanPane, library: libraryPane, meals: mealsPane, quick: quickPane })[tab](pane, query);
+  }
+
+  // ---------- recent ----------
+
+  // Build the diary entry for a recent item at the amount used last time.
+  function repeatEntry(group) {
+    const e = group.last;
+    if (e.kind === 'meal') {
+      const meal = ctx.store.state.meals.find((m) => m.id === e.mealId);
+      return { kind: 'meal', mealId: meal.id, name: meal.name, brand: '', qty: e.qty, unit: 'serving', servingLabel: '1 serving', nutrients: scaleNutrients(meal.perServing, e.qty) };
+    }
+    if (e.kind === 'food') {
+      const food = ctx.store.state.foods.find((f) => f.id === e.foodId);
+      const unit = e.unit === 'g' && food.servingGrams > 0 ? 'g' : 'serving';
+      const qty = unit === e.unit ? e.qty : 1;
+      return { kind: 'food', foodId: food.id, name: food.name, brand: food.brand || '', qty, unit, servingLabel: food.servingLabel, nutrients: nutrientsForAmount(food, qty, unit) };
+    }
+    const { id, date, slot, ...rest } = e;
+    return rest;
+  }
+
+  function recentPane(pane) {
+    let groups = ctx.store.recentFor(state.slot);
+    const anyMeal = !groups.length;
+    if (anyMeal) groups = ctx.store.recentFor(null);
+    const amount = (g) => {
+      const e = repeatEntry(g);
+      return `${e.unit === 'g' ? `${trimNum(e.qty)} g` : `${trimNum(e.qty)} serving${e.qty === 1 ? '' : 's'}`}, ${fmt(e.nutrients.kcal || 0)} kcal`;
+    };
+    mount(
+      pane,
+      groups.length
+        ? `<p class="hint">${anyMeal ? `Nothing logged at ${slotLabel(state.slot).toLowerCase()} lately, so here's what you've eaten at any meal.` : `What you've had at ${slotLabel(state.slot).toLowerCase()} in the last 30 days. Tap + to log it at the same amount.`}</p>
+           <ul class="list">${groups
+             .map(
+               (g, i) => `<li class="row-wrap">
+                 <button type="button" class="row" data-act="open" data-i="${i}">
+                   <span class="r-main"><b>${esc(g.last.name)}</b><small>${esc(amount(g))}</small></span>
+                 </button>
+                 <button type="button" class="btn small add-one" data-act="quicklog" data-i="${i}" aria-label="Log ${esc(g.last.name)}, ${esc(amount(g))}">${icon.plus}</button>
+               </li>`
+             )
+             .join('')}</ul>`
+        : `<div class="empty"><p>Foods you log show up here, sorted by what you eat most at each meal. Then logging your usual breakfast is one tap.</p>
+           <button type="button" class="btn primary" data-act="scan">Scan a barcode</button></div>`,
+      {
+        scan: () => showTab('scan'),
+        open: (el) => {
+          const g = groups[Number(el.dataset.i)];
+          const e = repeatEntry(g);
+          const back = () => showTab('recent');
+          if (e.kind === 'food') showPicker({ food: ctx.store.state.foods.find((f) => f.id === e.foodId), back, initial: { qty: e.qty, unit: e.unit } });
+          else if (e.kind === 'meal') showMealPicker(ctx.store.state.meals.find((m) => m.id === e.mealId), back, e.qty);
+          else quickLog(el, g);
+        },
+        quicklog: (el) => quickLog(el, groups[Number(el.dataset.i)]),
+      }
+    );
+  }
+
+  // Logs without closing, so you can add several things in a row.
+  function quickLog(el, group) {
+    const entry = repeatEntry(group);
+    if (entry.foodId && entry.kind === 'food') ctx.store.touchFood(entry.foodId);
+    if (entry.mealId) ctx.store.touchMeal(entry.mealId);
+    const rec = ctx.store.addEntry({ ...entry, date: state.date, slot: state.slot });
+    const btn = el.closest('li')?.querySelector('.add-one');
+    if (btn) {
+      btn.classList.add('done');
+      btn.innerHTML = icon.check;
+      btn.setAttribute('aria-label', `Logged ${entry.name}`);
+    }
+    toast(`Logged ${entry.name}`, { actionLabel: 'Undo', onAction: () => ctx.store.deleteEntry(rec.id) });
   }
 
   // ---------- scan ----------
@@ -206,9 +281,11 @@ export function openAdd(ctx, opts = {}) {
 
   // ---------- amount picker ----------
 
-  function showPicker({ food, back, isNew = false }) {
-    let unit = 'serving';
+  function showPicker({ food, back, isNew = false, initial = null }) {
     const canGrams = food.servingGrams > 0;
+    const last = initial || (isNew ? null : ctx.store.lastAmount(food.id));
+    let unit = last?.unit === 'g' && canGrams ? 'g' : 'serving';
+    const startQty = last && last.unit === unit ? last.qty : 1;
     sheet.setTitle(isNew ? 'Found it' : 'How much?');
     sheet.showBack(back || null);
     const root = sheet.render(
@@ -216,13 +293,14 @@ export function openAdd(ctx, opts = {}) {
       ${food.brand ? `<p class="muted">${esc(food.brand)}</p>` : ''}
       ${isNew ? `<p class="source">From ${esc(food.source)}. It'll be saved to your foods when you log it. Numbers look off? Tap Edit to fix them first.</p>` : ''}
       <div class="amount">
-        <label class="field"><span>Amount</span><input id="qty" inputmode="decimal" autocomplete="off" value="1"></label>
+        <label class="field"><span>Amount</span><input id="qty" inputmode="decimal" autocomplete="off" value="${trimNum(startQty)}"></label>
         <div class="seg" role="group" aria-label="Unit">
-          <button type="button" data-act="unit" data-unit="serving" aria-pressed="true">Servings</button>
-          ${canGrams ? '<button type="button" data-act="unit" data-unit="g" aria-pressed="false">Grams</button>' : ''}
+          <button type="button" data-act="unit" data-unit="serving" aria-pressed="${unit === 'serving'}">Servings</button>
+          ${canGrams ? `<button type="button" data-act="unit" data-unit="g" aria-pressed="${unit === 'g'}">Grams</button>` : ''}
         </div>
       </div>
-      <p class="muted small">1 serving is ${esc(food.servingLabel || '1 serving')}</p>
+      <div id="chips"${unit === 'g' ? ' hidden' : ''}>${amountChips(startQty)}</div>
+      <p class="muted small">1 serving is ${esc(food.servingLabel || '1 serving')}${last && !initial ? `. Filled in with what you had last time.` : ''}</p>
       <div id="preview"></div>
       <label class="field"><span>Meal</span><select id="slot">${slotOptions(state.slot)}</select></label>
       <div class="btn-row">
@@ -237,6 +315,7 @@ export function openAdd(ctx, opts = {}) {
           if (q > 0) qtyEl.value = trimNum(next === 'g' ? q * food.servingGrams : q / food.servingGrams, next === 'g' ? 0 : 2);
           unit = next;
           root.querySelectorAll('[data-act="unit"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.unit === unit)));
+          root.querySelector('#chips').hidden = unit === 'g';
           update();
         },
         edit: () =>
@@ -273,44 +352,94 @@ export function openAdd(ctx, opts = {}) {
       const q = readNum(qtyEl);
       preview.innerHTML = q > 0 ? previewHtml(nutrientsForAmount(food, q, unit)) : '<p class="err-text">Enter an amount above 0.</p>';
     }
-    qtyEl.addEventListener('input', update);
+    wireAmountChips(root, qtyEl, update);
     update();
   }
 
-  // ---------- library ----------
+  // ---------- library and USDA search ----------
 
-  function libraryPane(pane) {
-    const foods = ctx.store.state.foods;
+  function libraryPane(pane, query = '') {
+    let usdaResults = [];
+    let searchToken = 0;
     const root = mount(
       pane,
-      foods.length
-        ? `<input type="search" id="q" class="search" placeholder="Search your foods" aria-label="Search your foods" autocomplete="off">
-           <ul class="list" id="list"></ul>
-           <button type="button" class="btn" data-act="new">${icon.plus} New food</button>`
-        : `<div class="empty"><p>Foods you scan or enter are saved here so you can log them again in two taps.</p>
-           <div class="btn-row"><button type="button" class="btn primary" data-act="scan">Scan a barcode</button><button type="button" class="btn" data-act="new">Enter a food</button></div></div>`,
+      `<form data-submit="usda" class="inline-form" novalidate role="search">
+        <input type="search" id="q" class="search grow" placeholder="Search foods, like banana or chicken breast" aria-label="Search foods" autocomplete="off" value="${esc(query)}">
+      </form>
+      <ul class="list" id="list"></ul>
+      <div id="usda"></div>
+      <button type="button" class="btn" data-act="new">${icon.plus} Enter a food by hand</button>`,
       {
         pick: (el) => {
           const food = ctx.store.state.foods.find((f) => f.id === el.dataset.id);
           if (food) showPicker({ food, back: () => showTab('library') });
         },
+        usda: () => runUsda(),
+        usdapick: (el) => {
+          const food = usdaResults[Number(el.dataset.i)];
+          const q = qEl.value;
+          if (food) showPicker({ food, isNew: true, back: () => showTab('library', q) });
+        },
         new: () =>
           renderFoodForm(sheet, ctx, {
+            prefill: { name: qEl.value.trim() },
             onBack: () => showTab('library'),
             onSave: (saved) => showPicker({ food: saved, back: () => showTab('library') }),
           }),
-        scan: () => showTab('scan'),
       }
     );
+    const qEl = root.querySelector('#q');
     const list = root.querySelector('#list');
-    if (!list) return;
-    const q = root.querySelector('#q');
-    const draw = () => {
-      const rows = sortFoods(ctx.store.state.foods, q.value);
-      list.innerHTML = rows.length ? rows.map((f) => foodRow(f)).join('') : `<li class="muted pad">Nothing matches "${esc(q.value)}".</li>`;
-    };
-    q.addEventListener('input', draw);
-    draw();
+    const usdaEl = root.querySelector('#usda');
+
+    function drawOwn() {
+      const q = qEl.value.trim();
+      const rows = sortFoods(ctx.store.state.foods, q);
+      if (!ctx.store.state.foods.length) {
+        list.hidden = true;
+      } else {
+        list.innerHTML = rows.length ? rows.map((f) => foodRow(f)).join('') : `<li class="muted pad">None of your saved foods match "${esc(q)}".</li>`;
+      }
+      usdaResults = [];
+      searchToken++;
+      usdaEl.innerHTML =
+        q.length >= 2
+          ? `<button type="button" class="btn block ghost" data-act="usda">Search USDA for "${esc(q)}"</button>`
+          : ctx.store.state.foods.length
+            ? ''
+            : '<p class="hint">Type a food to search USDA\'s database of whole and common foods: produce, meat, eggs, rice, and dishes like tacos or fried rice.</p>';
+    }
+
+    async function runUsda() {
+      const q = qEl.value.trim();
+      if (q.length < 2) return;
+      const token = ++searchToken;
+      usdaEl.innerHTML = '<div class="working small-work"><span class="spinner" aria-hidden="true"></span><p>Searching USDA\u2026</p></div>';
+      try {
+        const results = await searchUsdaFoods(q, ctx.store.state.settings.usdaKey);
+        if (token !== searchToken || sheet.closed) return;
+        usdaResults = results;
+        usdaEl.innerHTML = results.length
+          ? `<h3 class="subhead">From USDA</h3>
+             <ul class="list">${results
+               .map(
+                 (f, i) => `<li><button type="button" class="row" data-act="usdapick" data-i="${i}">
+                   <span class="r-main wrap"><b>${esc(f.name)}</b><small>${esc(f.servingLabel)}</small></span>
+                   <span class="r-kcal">${fmt(f.nutrients.kcal ?? 0)}<small> kcal</small></span></button></li>`
+               )
+               .join('')}</ul>
+             <p class="hint">USDA names are wordy. "Raw" and "cooked" matter: cooked meat and rice weigh differently than raw.</p>`
+          : `<p class="muted">USDA has nothing for "${esc(q)}". Try fewer or simpler words, like "rice white cooked".</p>`;
+      } catch (err) {
+        if (token !== searchToken) return;
+        usdaEl.innerHTML = `<p class="err-text">${esc(err.name === 'TypeError' ? "Couldn't reach USDA. Check your connection." : err.message)}</p>
+          <button type="button" class="btn block ghost" data-act="usda">Try again</button>`;
+      }
+    }
+
+    qEl.addEventListener('input', drawOwn);
+    drawOwn();
+    if (query) runUsda();
   }
 
   // ---------- meals ----------
@@ -346,13 +475,14 @@ export function openAdd(ctx, opts = {}) {
     );
   }
 
-  function showMealPicker(meal, back) {
+  function showMealPicker(meal, back, startQty = 1) {
     sheet.setTitle('How much?');
     sheet.showBack(back || null);
     const root = sheet.render(
       `<h3 class="food-name">${esc(meal.name)}</h3>
       <p class="muted small">Makes ${trimNum(meal.yield)} serving${meal.yield === 1 ? '' : 's'}</p>
-      <label class="field"><span>Servings</span><input id="qty" inputmode="decimal" autocomplete="off" value="1"></label>
+      <label class="field"><span>Servings</span><input id="qty" inputmode="decimal" autocomplete="off" value="${trimNum(startQty)}"></label>
+      <div id="chips">${amountChips(startQty)}</div>
       <div id="preview"></div>
       <label class="field"><span>Meal</span><select id="slot">${slotOptions(state.slot)}</select></label>
       <button type="button" class="btn primary block" data-act="log">Log it</button>`,
@@ -375,7 +505,7 @@ export function openAdd(ctx, opts = {}) {
       const q = readNum(qtyEl);
       preview.innerHTML = q > 0 ? previewHtml(scaleNutrients(meal.perServing, q)) : '<p class="err-text">Enter an amount above 0.</p>';
     };
-    qtyEl.addEventListener('input', update);
+    wireAmountChips(root, qtyEl, update);
     update();
   }
 
@@ -422,6 +552,10 @@ export function openAdd(ctx, opts = {}) {
 
   if (opts.food) showPicker({ food: opts.food });
   else if (opts.meal) showMealPicker(opts.meal);
-  else showTab(opts.tab || ctx.store.state.settings.addTab || 'scan');
+  else {
+    const hasRecent = ctx.store.recentFor(null).length > 0;
+    const remembered = ctx.store.state.settings.addTab;
+    showTab(opts.tab || (hasRecent ? 'recent' : remembered && remembered !== 'recent' ? remembered : 'scan'));
+  }
   return sheet;
 }

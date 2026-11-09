@@ -126,9 +126,17 @@ function convertMass(value, fromUnit, toUnit, key) {
 // Handles both shapes FoodData Central uses for nutrient rows.
 function readFoodNutrients(list) {
   const out = {};
+  let atwater;
   for (const row of list || []) {
     const id = row.nutrientId ?? row.nutrient?.id;
     const number = String(row.nutrientNumber ?? row.nutrient?.number ?? '');
+    // Foundation foods often report energy only as Atwater factors (2047/2048), not 1008.
+    if ([2047, 2048].includes(id) || ['957', '958'].includes(number)) {
+      const v = num(row.value ?? row.amount);
+      const u = String(row.unitName ?? row.nutrient?.unitName ?? '').toUpperCase();
+      if (v !== undefined && u === 'KCAL' && (atwater === undefined || id === 2048 || number === '958')) atwater = v;
+      continue;
+    }
     const key = FDC_BY_ID[id] ?? FDC_BY_NUMBER[number];
     if (!key) continue;
     const value = num(row.value ?? row.amount);
@@ -142,7 +150,60 @@ function readFoodNutrients(list) {
       if (v !== undefined && out[key] === undefined) out[key] = v;
     }
   }
+  if (out.kcal === undefined && atwater !== undefined) out.kcal = atwater;
   return out;
+}
+
+// ---------- USDA name search for whole and generic foods ----------
+
+const GENERIC_TYPES = 'Foundation,SR Legacy,Survey (FNDDS)';
+
+// Generic foods report nutrients per 100 g. Use the first real household measure as the serving.
+export function parseUsdaGeneric(food) {
+  const per100 = readFoodNutrients(food.foodNutrients);
+  if (per100.kcal === undefined) return null;
+  const measure = (food.foodMeasures || []).find(
+    (m) => num(m.gramWeight) > 0 && String(m.disseminationText || '').trim() && !/quantity not specified/i.test(m.disseminationText)
+  );
+  const grams = measure ? num(measure.gramWeight) : 100;
+  const nutrients = {};
+  for (const [k, v] of Object.entries(per100)) nutrients[k] = (v * grams) / 100;
+  return {
+    name: titleCase(food.description) || 'Unnamed food',
+    brand: '',
+    barcode: '',
+    servingLabel: measure ? `${String(measure.disseminationText).trim()} (${rnd(grams, 1)} g)` : '100 g',
+    servingGrams: grams,
+    nutrients: finish(nutrients),
+    source: 'USDA FoodData Central',
+    fdcId: food.fdcId,
+  };
+}
+
+export function parseUsdaGenericSearch(json) {
+  const seen = new Set();
+  const out = [];
+  for (const f of json?.foods || []) {
+    const parsed = parseUsdaGeneric(f);
+    if (!parsed) continue;
+    const key = parsed.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(parsed);
+  }
+  return out;
+}
+
+export async function searchUsdaFoods(query, apiKey, { fetchFn = fetch, signal } = {}) {
+  const url =
+    'https://api.nal.usda.gov/fdc/v1/foods/search' +
+    `?api_key=${encodeURIComponent(apiKey || 'DEMO_KEY')}&query=${encodeURIComponent(query)}` +
+    `&dataType=${encodeURIComponent(GENERIC_TYPES)}&pageSize=25&requireAllWords=true`;
+  const res = await fetchFn(url, { signal });
+  if (res.status === 429) throw new Error('USDA rate limit reached. Add your own free API key in Profile.');
+  if (res.status === 403 || res.status === 401) throw new Error('USDA rejected the API key. Check it in Profile.');
+  if (!res.ok) throw new Error(`USDA returned ${res.status}`);
+  return parseUsdaGenericSearch(await res.json());
 }
 
 const LABEL_KEYS = {

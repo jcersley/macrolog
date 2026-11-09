@@ -11,7 +11,17 @@ A personal calorie and macro tracker that runs as a web app on your iPhone's Hom
 - **Profile and goals:** your calorie goal comes from your age, height, weight, activity and weekly loss rate. It also sets goals for protein, carbs, fat, fiber, added sugar, saturated fat, sodium, cholesterol, and six vitamins and minerals. Each goal shows where it comes from.
 - **Progress:** a weight chart with a 7-day average and your goal pace, your actual weekly pace, an estimated date for your goal weight, calories for the last 14 days, and 7-day nutrient averages.
 - **Monday weigh-in:** the first time you open the app on a Monday, it asks for your weight. "Not today" skips it until next week.
-- **Backup:** export and restore from Profile.
+- **Backup:** export and restore from Profile, with a reminder every 30 days.
+
+### Added in version 1.1
+
+- **Recent:** the Add sheet opens on what you usually eat at that meal. Tap **+** to log it at the same amount without leaving the sheet, so you can add several things in a row.
+- **Last amount:** any food opens with the amount you had last time.
+- **Amount buttons:** ½, 1, 1½ and 2, so most logs need no typing.
+- **Same as yesterday:** an empty meal offers to copy yesterday's version. **Copy from a past day** goes back two weeks.
+- **Food search:** the Foods tab in the Add sheet searches USDA by name for foods without barcodes, like produce, meat, eggs, rice and common dishes. Whatever you log is saved to your foods.
+- **Backup reminder:** about once a month the app asks you to export a backup.
+- **Update notice:** when a new version arrives while the app is open, it offers to reload.
 
 ## Put it on your iPhone (about 15 minutes, free)
 
@@ -34,7 +44,12 @@ The app uses a shared demo key that only allows a few dozen lookups an hour. A f
 
 ## Updating the app later
 
-Upload the changed files to the repo the same way. Then, in `sw.js`, change `macrolog-v1` to `macrolog-v2` (and so on). That tells phones to fetch the new version. Close and reopen the app twice to pick it up.
+1. In your repo on github.com, click **Add file**, then **Upload files**.
+2. Drag in everything inside the new `macrolog` folder (the contents, not the folder itself). Files with the same name are replaced.
+3. Click **Commit changes** and wait for the green check under **Deployments** (a minute or two).
+4. Close the app on your phone completely, then open it again. If it shows "An update is ready", tap **Reload**.
+
+Each new version changes `VERSION` in `sw.js` (`macrolog-v2`, `v3`...). That's what tells phones to fetch the new files. If you edit files yourself, bump it too.
 
 ## Things to know
 

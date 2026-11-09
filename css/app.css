@@ -323,3 +323,25 @@ select { -webkit-appearance: none; appearance: none; background-image: linear-gr
   .sheet { animation: none; }
   .spinner { animation-duration: 2.4s; }
 }
+
+/* ---------- v2: faster logging ---------- */
+.chips { display: flex; gap: 8px; }
+.chip {
+  flex: 1; min-height: 44px; border: 1.5px solid var(--line); border-radius: 22px; background: var(--panel);
+  font-weight: 800; font-size: 1.05rem; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.add-one { min-width: 48px; padding: 6px 10px; }
+.add-one.done { background: var(--ink); color: var(--panel); }
+.slot-actions { display: flex; flex-wrap: wrap; gap: 0 18px; }
+.add-link.quiet { color: var(--muted); }
+.copy-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 8px; padding: 10px 12px; text-align: left;
+  background: var(--panel); border: 1.5px dashed var(--line); border-radius: var(--radius); font-weight: 800; cursor: pointer;
+}
+.copy-btn span { display: flex; flex-direction: column; min-width: 0; }
+.copy-btn small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn.ghost { border-style: dashed; }
+.r-main.wrap b, .r-main.wrap small { white-space: normal; }
+.working.small-work { padding: 16px 0; }
+body.locked #toasts { top: calc(env(safe-area-inset-top) + 12px); bottom: auto; }

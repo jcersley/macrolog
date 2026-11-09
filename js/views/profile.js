@@ -3,7 +3,8 @@
 import {
   ACTIVITY, computeGoals, kgToLb, lbToKg, ftInToCm, cmToFtIn, trimNum, nutrientMeta, dateKey,
 } from '../nutrition.js';
-import { esc, fmt, mount, toast, readNum, fmtWeight, confirmSheet } from '../ui.js';
+import { esc, fmt, mount, toast, readNum, fmtWeight, confirmSheet, longDate } from '../ui.js';
+import { exportBackup } from '../backup.js';
 
 const RATES = {
   us: [0, 0.5, 1, 1.5, 2].map((lb) => ({ kg: lbToKg(lb), label: lb ? `${lb} lb a week` : 'Maintain my weight' })),
@@ -64,7 +65,8 @@ export function renderProfile(view, ctx) {
       <p class="hint">The shared key allows only a few dozen lookups an hour. A free personal key from api.data.gov raises that to 1,000.</p>
       <button type="button" class="btn" data-act="savekey">Save key</button>
       <h3 class="subhead">Backup</h3>
-      <p class="hint">Everything lives on this phone only. Export a backup now and then, and before clearing Safari data or switching phones.</p>
+      <p class="hint">Everything lives on this phone only. Export a backup now and then, and before clearing Safari data or switching phones. Save it to iCloud Drive (Save to Files) so it's off the phone.</p>
+      <p class="small">${store.state.settings.lastBackup ? `Last backup: ${esc(longDate(store.state.settings.lastBackup))}` : 'No backup yet.'}</p>
       <div class="btn-row">
         <button type="button" class="btn" data-act="export">Export backup</button>
         <label class="btn file-btn">Restore backup<input type="file" accept="application/json,.json" id="s-import" class="visually-hidden"></label>
@@ -93,7 +95,9 @@ export function renderProfile(view, ctx) {
         store.setSettings({ usdaKey: root.querySelector('#s-key').value.trim() });
         toast('Key saved');
       },
-      export: () => exportBackup(store),
+      export: async () => {
+        if (await exportBackup(store)) toast('Backup exported');
+      },
       reset: async () => {
         const ok = await confirmSheet({
           title: 'Erase everything?',
@@ -181,24 +185,4 @@ function goalsHtml(g, units, saved) {
     ${g.warnings.map((w) => `<p class="notice">${esc(w)}</p>`).join('')}
     <details class="why"><summary>Every goal and where it comes from</summary><table class="goal-table"><tbody>${rows}</tbody></table></details>
     <p class="hint">These are general adult guidelines (US Dietary Guidelines, FDA Daily Values, National Academies). If you have a condition like high blood pressure, diabetes or kidney disease, ask your doctor which targets fit you.</p>`;
-}
-
-async function exportBackup(store) {
-  const text = store.exportJSON();
-  const name = `macrolog-backup-${dateKey()}.json`;
-  const file = new File([text], name, { type: 'application/json' });
-  try {
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Macrolog backup' });
-      return;
-    }
-  } catch (err) {
-    if (err?.name === 'AbortError') return;
-  }
-  const url = URL.createObjectURL(file);
-  const a = Object.assign(document.createElement('a'), { href: url, download: name });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }

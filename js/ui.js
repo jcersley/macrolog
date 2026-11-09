@@ -46,7 +46,40 @@ export const icon = {
   right: svg('<path d="M9 5l7 7-7 7"/>'),
   trash: svg('<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>'),
   bolt: svg('<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>'),
+  check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
+  copy: svg('<rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>'),
 };
+
+// Amount shortcuts so most logs need no keyboard.
+const CHIPS = [
+  [0.5, '\u00bd'],
+  [1, '1'],
+  [1.5, '1\u00bd'],
+  [2, '2'],
+];
+export const amountChips = (current) =>
+  `<div class="chips" role="group" aria-label="Quick amounts">${CHIPS.map(
+    ([v, label]) => `<button type="button" class="chip" data-chip="${v}" aria-pressed="${v === current}" aria-label="${v} serving${v === 1 ? '' : 's'}">${label}</button>`
+  ).join('')}</div>`;
+
+export function wireAmountChips(root, qtyEl, onChange) {
+  const sync = () => {
+    const q = readNum(qtyEl);
+    root.querySelectorAll('[data-chip]').forEach((c) => c.setAttribute('aria-pressed', String(Number(c.dataset.chip) === q)));
+  };
+  root.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-chip]');
+    if (!chip) return;
+    qtyEl.value = chip.dataset.chip;
+    sync();
+    onChange();
+  });
+  qtyEl.addEventListener('input', () => {
+    sync();
+    onChange();
+  });
+  sync();
+}
 
 // Replaces a container's content with `html` and wires data-act clicks and data-submit forms.
 export function mount(container, html, handlers = {}) {

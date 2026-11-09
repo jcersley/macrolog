@@ -1,5 +1,5 @@
-// Offline cache for the app itself. Food database requests (other origins) are never cached.
-const VERSION = 'macrolog-v1';
+// Offline cache for the app itself. Bump VERSION on every update so phones fetch the new files. Food database requests (other origins) are never cached.
+const VERSION = 'macrolog-v2';
 const SHELL = [
   './',
   'index.html',
@@ -12,6 +12,7 @@ const SHELL = [
   'js/lookup.js',
   'js/scanner.js',
   'js/charts.js',
+  'js/backup.js',
   'js/views/today.js',
   'js/views/add.js',
   'js/views/foodform.js',
@@ -27,7 +28,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(VERSION).then((cache) => cache.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {

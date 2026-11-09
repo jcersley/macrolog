@@ -1,13 +1,13 @@
 // App state in localStorage, with change notifications and JSON backup/restore.
 
-import { dateKey, normalizeBarcode, sortedWeights } from './nutrition.js';
+import { dateKey, addDays, normalizeBarcode, sortedWeights } from './nutrition.js';
 
 const KEY = 'macrolog.v1';
 
 const defaults = () => ({
   version: 1,
   profile: null, // { sex, age, heightCm, weightKg, activity, rateKgPerWeek, goalWeightKg? }
-  settings: { units: 'us', usdaKey: '', weighDismissed: '' },
+  settings: { units: 'us', usdaKey: '', weighDismissed: '', lastBackup: '', backupSnoozed: '' },
   foods: [], // { id, name, brand, barcode, servingLabel, servingGrams?, nutrients, source, lastUsed, uses }
   meals: [], // { id, name, yield, items: [{ name, servings, servingLabel, nutrients }], lastUsed }
   log: [], // { id, date, slot, name, detail, nutrients, kind }
@@ -165,8 +165,47 @@ export function createStore({ storage = globalThis.localStorage, onError = () =>
       state.log = state.log.filter((e) => e.id !== id);
       commit();
     },
+    addEntries(entries) {
+      const recs = entries.map((e) => ({ ...e, id: uid() }));
+      state.log.push(...recs);
+      commit();
+      return recs;
+    },
+    deleteEntries(ids) {
+      const drop = new Set(ids);
+      state.log = state.log.filter((e) => !drop.has(e.id));
+      commit();
+    },
     entriesForDate(date) {
       return state.log.filter((e) => e.date === date);
+    },
+    // The amount used the last time this food was logged, or null.
+    lastAmount(foodId) {
+      for (let i = state.log.length - 1; i >= 0; i--) {
+        const e = state.log[i];
+        if (e.foodId === foodId && e.kind === 'food' && e.qty > 0) return { qty: e.qty, unit: e.unit || 'serving' };
+      }
+      return null;
+    },
+    // What you usually eat at this meal: grouped by food, meal or repeated quick add,
+    // most frequent first. slot = null looks across all meals.
+    recentFor(slot, { today = dateKey(), days = 30, limit = 12 } = {}) {
+      const cutoff = addDays(today, -days);
+      const groups = new Map();
+      for (const e of state.log) {
+        if ((slot && e.slot !== slot) || e.date < cutoff || e.date > today) continue;
+        if (e.kind === 'food' && !state.foods.some((f) => f.id === e.foodId)) continue;
+        if (e.kind === 'meal' && !state.meals.some((m) => m.id === e.mealId)) continue;
+        const key =
+          e.kind === 'meal' ? `m:${e.mealId}` : e.foodId ? `f:${e.foodId}` : `q:${String(e.name).toLowerCase()}|${Math.round(e.nutrients?.kcal || 0)}`;
+        const g = groups.get(key) || { key, count: 0, last: null };
+        g.count++;
+        if (!g.last || e.date >= g.last.date) g.last = e;
+        groups.set(key, g);
+      }
+      return [...groups.values()]
+        .sort((a, b) => b.count - a.count || (a.last.date < b.last.date ? 1 : a.last.date > b.last.date ? -1 : 0))
+        .slice(0, limit);
     },
 
     // --- backup ---

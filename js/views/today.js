@@ -72,7 +72,16 @@ export function renderToday(view, ctx) {
                 .join('')}</ul>`
             : ''
         }
-        <button type="button" class="add-link" data-act="add" data-slot="${s.id}">${icon.plus} Add to ${s.label.toLowerCase()}</button>
+        ${(() => {
+          const prev = store.state.log.filter((e) => e.slot === s.id && e.date === addDays(date, -1));
+          return !list.length && prev.length
+            ? `<button type="button" class="copy-btn" data-act="copyprev" data-slot="${s.id}">${icon.copy}<span>Same as yesterday<small>${esc(prev.map((e) => e.name).join(', '))}, ${fmt(prev.reduce((t, e) => t + (e.nutrients.kcal || 0), 0))} kcal</small></span></button>`
+            : '';
+        })()}
+        <div class="slot-actions">
+          <button type="button" class="add-link" data-act="add" data-slot="${s.id}">${icon.plus} Add to ${s.label.toLowerCase()}</button>
+          ${hasHistory(store, s.id, date) ? `<button type="button" class="add-link quiet" data-act="copyfrom" data-slot="${s.id}">${icon.copy} Copy from a past day</button>` : ''}
+        </div>
       </section>`;
   }).join('');
 
@@ -115,6 +124,56 @@ export function renderToday(view, ctx) {
         if (e) openEntry(ctx, e);
       },
       profile: () => ctx.goTab('profile'),
+      copyprev: (el) => {
+        const src = store.state.log.filter((e) => e.slot === el.dataset.slot && e.date === addDays(date, -1));
+        copyEntries(ctx, src, date, el.dataset.slot);
+      },
+      copyfrom: (el) => openCopy(ctx, el.dataset.slot, date),
+    }
+  );
+}
+
+function hasHistory(store, slot, date) {
+  const from = addDays(date, -14);
+  return store.state.log.some((e) => e.slot === slot && e.date < date && e.date >= from);
+}
+
+function copyEntries(ctx, src, date, slot) {
+  if (!src.length) return;
+  const recs = ctx.store.addEntries(src.map(({ id, date: _d, slot: _s, ...rest }) => ({ ...rest, date, slot })));
+  const label = SLOTS.find((x) => x.id === slot).label.toLowerCase();
+  toast(`Copied ${recs.length} item${recs.length === 1 ? '' : 's'} to ${label}`, {
+    actionLabel: 'Undo',
+    onAction: () => ctx.store.deleteEntries(recs.map((r) => r.id)),
+  });
+}
+
+// Pick a past day (last 14) and copy that meal to the day being viewed.
+function openCopy(ctx, slot, date) {
+  const label = SLOTS.find((x) => x.id === slot).label;
+  const days = [];
+  for (let i = 1; i <= 14; i++) {
+    const d = addDays(date, -i);
+    const entries = ctx.store.state.log.filter((e) => e.slot === slot && e.date === d);
+    if (entries.length) days.push({ d, entries });
+  }
+  const s = openSheet({ title: `Copy ${label.toLowerCase()} from` });
+  s.render(
+    `<p class="hint">Copies every item from that day's ${label.toLowerCase()} to ${esc(dateLabel(date, dateKey()).toLowerCase() === 'today' ? 'today' : longDate(date))}. You can edit or remove items after.</p>
+    <ul class="list">${days
+      .map(
+        ({ d, entries }, i) => `<li><button type="button" class="row" data-act="copy" data-i="${i}">
+          <span class="r-main wrap"><b>${esc(dateLabel(d, dateKey()) === 'Today' ? 'Today' : `${dateLabel(d, dateKey())}, ${longDate(d).split(', ').slice(1).join(', ')}`)}</b>
+            <small>${esc(entries.map((e) => e.name).join(', '))}</small></span>
+          <span class="r-kcal">${fmt(entries.reduce((t, e) => t + (e.nutrients.kcal || 0), 0))}<small> kcal</small></span></button></li>`
+      )
+      .join('')}</ul>`,
+    {
+      copy: (el) => {
+        const { entries } = days[Number(el.dataset.i)];
+        s.close();
+        copyEntries(ctx, entries, date, slot);
+      },
     }
   );
 }

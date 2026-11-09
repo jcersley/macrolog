@@ -1,8 +1,9 @@
-// Boot, tab routing, day rollover and the Monday weigh-in prompt.
+// Boot, tab routing, day rollover, the Monday weigh-in and the monthly backup reminder.
 
 import { createStore } from './store.js';
 import { dateKey, shouldPromptWeighIn } from './nutrition.js';
-import { toast } from './ui.js';
+import { toast, openSheet } from './ui.js';
+import { shouldPromptBackup, snoozeDate, firstLogDate, exportBackup } from './backup.js';
 import { renderToday } from './views/today.js';
 import { renderFoods } from './views/foods.js';
 import { renderProgress, openWeightSheet } from './views/progress.js';
@@ -50,10 +51,49 @@ document.getElementById('tabs').addEventListener('click', (e) => {
 
 store.subscribe(() => render());
 
+function maybeBackup() {
+  const today = dateKey();
+  const { lastBackup, backupSnoozed } = store.state.settings;
+  if (state.backupOpen) return;
+  if (!shouldPromptBackup({ today, lastBackup, snoozedUntil: backupSnoozed, firstLogDate: firstLogDate(store.state.log) })) return;
+  state.backupOpen = true;
+  let handled = false;
+  const s = openSheet({
+    title: 'Time for a backup',
+    onClose: () => {
+      state.backupOpen = false;
+      if (!handled) store.setSettings({ backupSnoozed: snoozeDate(today) });
+    },
+  });
+  s.render(
+    `<p>Your foods and history live only on this phone. A backup takes ten seconds: tap Export, then Save to Files and pick iCloud Drive.</p>
+    <div class="btn-row">
+      <button type="button" class="btn primary" data-act="export">Export backup</button>
+      <button type="button" class="btn" data-act="later">Remind me next week</button>
+    </div>`,
+    {
+      export: async () => {
+        if (await exportBackup(store)) {
+          handled = true;
+          s.close();
+          toast('Backup exported. Next reminder in 30 days.');
+        }
+      },
+      later: () => s.close(),
+    }
+  );
+}
+
+// One prompt per open: the weigh-in comes first.
+function prompts() {
+  if (!maybeWeighIn()) maybeBackup();
+}
+
 function maybeWeighIn() {
-  if (state.weighOpen || !store.state.profile) return;
+  if (state.weighOpen) return true;
+  if (!store.state.profile) return false;
   const now = new Date();
-  if (!shouldPromptWeighIn({ now, weights: store.state.weights, dismissedKey: store.state.settings.weighDismissed })) return;
+  if (!shouldPromptWeighIn({ now, weights: store.state.weights, dismissedKey: store.state.settings.weighDismissed })) return false;
   state.weighOpen = true;
   const today = dateKey(now);
   openWeightSheet(ctx, {
@@ -66,6 +106,7 @@ function maybeWeighIn() {
       store.setSettings({ weighDismissed: today });
     },
   });
+  return true;
 }
 
 // The app can sit open in the background for days, so check the date when it comes back.
@@ -76,16 +117,21 @@ function onResume() {
     state.todayKey = t;
     render();
   }
-  maybeWeighIn();
+  prompts();
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') onResume();
 });
 
 render();
-maybeWeighIn();
+prompts();
 
 navigator.storage?.persist?.().catch(() => {});
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // A new version finished installing while the app was open.
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) toast('An update is ready.', { actionLabel: 'Reload', onAction: () => location.reload(), ms: 15000 });
+  });
 }
