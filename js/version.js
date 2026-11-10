@@ -1,8 +1,9 @@
 // Bump these with every release, and bump VERSION in sw.js to match (macrolog-v + the release number).
-export const APP_VERSION = '1.7.3';
+export const APP_VERSION = '1.8.0';
 export const RELEASED = '2026-11-09';
 
 export const CHANGELOG = [
+  { version: '1.8.0', date: '2026-11-09', notes: ['New Breakdown tab: where your calories came from (macro donut against your goal split), calories by meal, how close you are to each goal, and your biggest sources. Tap any chart for exact numbers.'] },
   { version: '1.7.3', date: '2026-11-09', notes: ['Pages start a little lower in the installed app, so the top of each page isn\'t blurred by iOS when you\'re not scrolling.'] },
   { version: '1.7.2', date: '2026-11-09', notes: ['New palette: DMG green, with a matching icon.'] },
   { version: '1.7.1', date: '2026-11-09', notes: ['Dark mode: softer dividers on Today, so the panel reads as one card instead of stacked white boxes.', 'Removed doubled lines under the last row of each section.'] },

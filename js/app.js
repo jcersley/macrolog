@@ -10,8 +10,9 @@ import { renderToday } from './views/today.js';
 import { renderFoods } from './views/foods.js';
 import { renderProgress, openWeightSheet } from './views/progress.js';
 import { renderProfile } from './views/profile.js';
+import { renderBreakdown } from './views/breakdown.js';
 
-const VIEWS = { today: renderToday, foods: renderFoods, progress: renderProgress, profile: renderProfile };
+const VIEWS = { today: renderToday, foods: renderFoods, breakdown: renderBreakdown, progress: renderProgress, profile: renderProfile };
 
 const store = createStore({ onError: () => toast("Couldn't save. Your phone's storage may be full.") });
 const state = { tab: 'today', date: dateKey(), todayKey: dateKey(), weighOpen: false };

@@ -15,6 +15,10 @@
   --over: #ff5a1f;
   --over-text: #b93a06;
   --rule: var(--ink);
+  --m-protein: #2a78d6;
+  --m-carbs: #eda100;
+  --m-fat: #1baf7a;
+  --chart-surface: var(--panel);
   --scrim: rgba(8, 14, 24, 0.55);
   --radius: 6px;
   --tabbar: 64px;
@@ -34,6 +38,9 @@
     --over: #ff6a33;
     --over-text: #ff8a5c;
     --rule: color-mix(in srgb, var(--ink) 32%, var(--panel));
+    --m-protein: #3987e5;
+    --m-carbs: #c98500;
+    --m-fat: #199e70;
     --scrim: rgba(0, 0, 0, 0.65);
   }
 }
@@ -71,7 +78,7 @@ small { font-size: 0.8125rem; color: var(--muted); font-weight: 500; }
 /* ---------- Tab bar ---------- */
 #tabs {
   position: fixed; inset: auto 0 0 0; z-index: 10;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   height: calc(var(--tabbar) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: var(--panel);
@@ -439,4 +446,53 @@ body.locked #toasts { top: calc(env(safe-area-inset-top) + 12px); bottom: auto; 
    Start pages below that band so nothing is blurred at rest; content still blurs as it scrolls up. */
 @media (display-mode: standalone) {
   #view { padding-top: calc(env(safe-area-inset-top) + 40px); }
+}
+
+/* ---------- v1.8: Breakdown ---------- */
+#tabs button { font-size: 0.6875rem; }
+#view > .screen { position: relative; }
+.bd-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; text-align: center; }
+.viz { background: var(--chart-surface); }
+.donut-wrap { display: grid; grid-template-columns: 176px 1fr; gap: 14px; align-items: center; }
+.donut { width: 176px; height: 176px; display: block; }
+.donut path { cursor: pointer; }
+.donut-big { font: 900 30px var(--font); fill: var(--ink); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.donut-small { font: 700 12px var(--font); fill: var(--muted); }
+.macro-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.macro-legend li { display: grid; grid-template-columns: 14px 1fr auto; column-gap: 8px; align-items: center; }
+.macro-legend .sw { width: 12px; height: 12px; border-radius: 3px; }
+.lg-name { font-weight: 800; }
+.lg-pct { font-weight: 900; font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.lg-sub { grid-column: 2 / -1; font-size: 0.8125rem; color: var(--muted); font-weight: 600; }
+.split { display: grid; gap: 8px; }
+.split-row { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: center; }
+.split-label { font-size: 0.8125rem; font-weight: 700; color: var(--muted); }
+.split-bar { display: flex; gap: 2px; height: 12px; }
+.split-bar i { display: block; height: 100%; }
+.split-bar i:first-child { border-radius: 4px 0 0 4px; }
+.split-bar i:last-child { border-radius: 0 4px 4px 0; }
+.hbars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.hbars li { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name val" "track track"; gap: 4px 10px; cursor: default; }
+.hb-name { grid-area: name; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-val { grid-area: val; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hb-pct { margin-left: 8px; color: var(--muted); font-weight: 700; }
+.hb-track { grid-area: track; height: 10px; background: var(--hair); border-radius: 4px; overflow: hidden; }
+.hb-track i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
+.goal-cols { width: 100%; height: auto; display: block; }
+.goal-cols .col { fill: var(--ink); cursor: pointer; }
+.goal-cols .col.over { fill: var(--over); }
+.goal-cols .base { stroke: var(--line); stroke-width: 1; }
+.goal-cols .goal { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.goal-cols .goal-tag { font: 700 10.5px var(--font); fill: var(--muted); }
+.goal-cols .col-val { font: 800 11px var(--font); fill: var(--ink); font-variant-numeric: tabular-nums; }
+.goal-cols .col-val.over { fill: var(--over-text); }
+.goal-cols .col-val.muted { fill: var(--muted); }
+.goal-cols .col-cap { font: 700 9px var(--font); fill: var(--paper, var(--panel)); }
+.goal-cols .col-lab { font: 700 10.5px var(--font); fill: var(--muted); }
+.lg-goal { width: 18px; height: 0; border-top: 1.5px dashed var(--muted); }
+.lg-over { width: 10px; height: 10px; border-radius: 2px; background: var(--over); }
+.tip { position: absolute; z-index: 5; max-width: 260px; padding: 8px 10px; border-radius: 6px; background: var(--ink); color: var(--panel); font-size: 0.875rem; font-weight: 700; pointer-events: none; box-shadow: 0 4px 14px rgba(8, 14, 24, 0.25); }
+@media (max-width: 380px) {
+  .donut-wrap { grid-template-columns: 1fr; justify-items: center; }
+  .macro-legend { width: 100%; }
 }

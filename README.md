@@ -13,6 +13,16 @@ A personal calorie and macro tracker that runs as a web app on your iPhone's Hom
 - **Monday weigh-in:** the first time you open the app on a Monday, it asks for your weight. "Not today" skips it until next week.
 - **Backup:** export and restore from Profile, with a reminder every 30 days.
 
+### Added in version 1.8: Breakdown tab
+
+A new tab between Foods and Progress with today's numbers as charts, following the date on Today:
+- **Where your calories came from:** a donut of protein, carbs and fat, with today's split against your goal split.
+- **Calories by meal.**
+- **How close you are to each goal:** eight bars as a share of each daily goal, with the goal line at 100%. Bars past a limit, or past a goal you asked to be warned about, turn your palette's warning color.
+- **Biggest sources:** your top foods for calories, protein or sodium.
+
+Tap any bar or slice for its exact numbers.
+
 ### Added in version 1.7
 
 - **Color palettes:** Profile > Settings > Color palette. Seven palettes (DMG green added in 1.7.2), each with light and dark versions and a matching icon, plus a Light / Dark / Match phone setting. The change is instant.

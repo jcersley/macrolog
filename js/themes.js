@@ -230,6 +230,7 @@ export const PALETTES = [
     "blurb": "The four greens of an original pocket handheld screen.",
     "darkOnly": false,
     "light": {
+      "chartSurface": "#EEF6CC",
       "bg": "#8BAC0F",
       "panel": "#9BBC0F",
       "ink": "#0F380F",
@@ -272,9 +273,17 @@ export const paletteById = (id) => PALETTES.find((p) => p.id === id) || PALETTES
 
 // --rule is for structural lines (panel borders, the thick label dividers). It's the ink color in
 // light mode; in dark mode a full-strength light line is glaring, so it's toned down toward the panel.
-const block = (t, dark = false) =>
-  Object.entries(VARS).map(([k, v]) => `${v}:${t[k]};`).join('') +
-  `--rule:${dark ? `color-mix(in srgb, ${t.ink} 32%, ${t.panel})` : t.ink};`;
+// Macro chart colors: a categorical trio checked for color-blind separation in both modes
+// (blue, yellow, aqua). --chart-surface lets a palette give charts a calmer backing.
+const MACRO = { light: ['#2a78d6', '#eda100', '#1baf7a'], dark: ['#3987e5', '#c98500', '#199e70'] };
+const block = (t, dark = false) => {
+  const [mp, mc, mf] = MACRO[dark ? 'dark' : 'light'];
+  return (
+    Object.entries(VARS).map(([k, v]) => `${v}:${t[k]};`).join('') +
+    `--rule:${dark ? `color-mix(in srgb, ${t.ink} 32%, ${t.panel})` : t.ink};` +
+    `--m-protein:${mp};--m-carbs:${mc};--m-fat:${mf};--chart-surface:${t.chartSurface || t.panel};`
+  );
+};
 
 // appearance: 'auto' follows the phone's light/dark setting; 'light' or 'dark' forces one.
 export function themeCSS(id, appearance = 'auto') {

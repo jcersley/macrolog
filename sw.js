@@ -1,5 +1,5 @@
 // Offline cache for the app itself. Bump VERSION on every update so phones fetch the new files. Food database requests (other origins) are never cached.
-const VERSION = 'macrolog-v11'; // keep in step with js/version.js
+const VERSION = 'macrolog-v12'; // keep in step with js/version.js
 const SHELL = [
   './',
   'index.html',
@@ -22,6 +22,7 @@ const SHELL = [
   'js/views/foods.js',
   'js/views/mealbuilder.js',
   'js/views/recipes.js',
+  'js/views/breakdown.js',
   'js/views/progress.js',
   'js/views/profile.js',
   'vendor/zxing-reader.js',
