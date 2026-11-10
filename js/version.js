@@ -1,8 +1,9 @@
 // Bump these with every release, and bump VERSION in sw.js to match (macrolog-v + the release number).
-export const APP_VERSION = '1.7.1';
+export const APP_VERSION = '1.7.2';
 export const RELEASED = '2026-11-09';
 
 export const CHANGELOG = [
+  { version: '1.7.2', date: '2026-11-09', notes: ['New palette: DMG green, with a matching icon.'] },
   { version: '1.7.1', date: '2026-11-09', notes: ['Dark mode: softer dividers on Today, so the panel reads as one card instead of stacked white boxes.', 'Removed doubled lines under the last row of each section.'] },
   {
     version: '1.7.0',

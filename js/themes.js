@@ -223,6 +223,43 @@ export const PALETTES = [
       "fg": "#EFEFEF",
       "accent": "#E5383B"
     }
+  },
+  {
+    "id": "dmg",
+    "name": "DMG green",
+    "blurb": "The four greens of an original pocket handheld screen.",
+    "darkOnly": false,
+    "light": {
+      "bg": "#8BAC0F",
+      "panel": "#9BBC0F",
+      "ink": "#0F380F",
+      "muted": "#173D16",
+      "hair": "#7E9C10",
+      "line": "#306230",
+      "accent": "#306230",
+      "onAccent": "#C4DE5A",
+      "accentText": "#0F380F",
+      "over": "#7A2410",
+      "overText": "#5E1A0A"
+    },
+    "dark": {
+      "bg": "#0F380F",
+      "panel": "#174617",
+      "ink": "#C4DE5A",
+      "muted": "#9BBC0F",
+      "hair": "#285A28",
+      "line": "#6E9A2E",
+      "accent": "#9BBC0F",
+      "onAccent": "#0F380F",
+      "accentText": "#B5D23A",
+      "over": "#E8853A",
+      "overText": "#F0A060"
+    },
+    "icon": {
+      "bg": "#0F380F",
+      "fg": "#9BBC0F",
+      "accent": "#8BAC0F"
+    }
   }
 ];
 
