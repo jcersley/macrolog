@@ -434,3 +434,9 @@ body.locked #toasts { top: calc(env(safe-area-inset-top) + 12px); bottom: auto; 
 .pal-check { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: var(--panel); display: none; align-items: center; justify-content: center; }
 .pal-check .ico { width: 14px; height: 14px; }
 .pal:has(input:checked) .pal-check { display: flex; }
+
+/* iOS 26 home-screen apps blur a band under the status bar that reaches a little past it.
+   Start pages below that band so nothing is blurred at rest; content still blurs as it scrolls up. */
+@media (display-mode: standalone) {
+  #view { padding-top: calc(env(safe-area-inset-top) + 40px); }
+}
