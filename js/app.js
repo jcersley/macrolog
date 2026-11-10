@@ -5,6 +5,7 @@ import { dateKey, shouldPromptWeighIn } from './nutrition.js';
 import { toast, openSheet } from './ui.js';
 import { shouldPromptBackup, snoozeDate, firstLogDate, exportBackup } from './backup.js';
 import { APP_VERSION } from './version.js';
+import { applyTheme } from './themes.js';
 import { renderToday } from './views/today.js';
 import { renderFoods } from './views/foods.js';
 import { renderProgress, openWeightSheet } from './views/progress.js';
@@ -50,7 +51,21 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   if (b) goTab(b.dataset.tab);
 });
 
-store.subscribe(() => render());
+// Re-apply the palette only when it changes.
+let themeKey = '';
+function syncTheme() {
+  const { palette = 'label', appearance = 'auto' } = store.state.settings;
+  const key = `${palette}|${appearance}`;
+  if (key !== themeKey) {
+    themeKey = key;
+    applyTheme(palette, appearance);
+  }
+}
+syncTheme();
+store.subscribe(() => {
+  syncTheme();
+  render();
+});
 
 function maybeBackup() {
   const today = dateKey();

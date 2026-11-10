@@ -13,6 +13,11 @@ A personal calorie and macro tracker that runs as a web app on your iPhone's Hom
 - **Monday weigh-in:** the first time you open the app on a Monday, it asks for your weight. "Not today" skips it until next week.
 - **Backup:** export and restore from Profile, with a reminder every 30 days.
 
+### Added in version 1.7
+
+- **Color palettes:** Profile > Settings > Color palette. Six palettes, each with light and dark versions and a matching icon, plus a Light / Dark / Match phone setting. The change is instant.
+- **Changing the home screen icon:** iPhone saves a web app's icon when you add it to the home screen, and there's no way for the app to change it afterward. To switch: Profile > Export backup, delete the app from your home screen (this erases its data), open your link in Safari, choose the palette there, Add to Home Screen, then Profile > Restore backup.
+
 ### Added in version 1.6: Recipes
 
 For batch cooking, where you weigh your bowl instead of guessing servings.

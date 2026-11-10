@@ -1,5 +1,5 @@
 // Offline cache for the app itself. Bump VERSION on every update so phones fetch the new files. Food database requests (other origins) are never cached.
-const VERSION = 'macrolog-v7'; // keep in step with js/version.js
+const VERSION = 'macrolog-v9'; // keep in step with js/version.js
 const SHELL = [
   './',
   'index.html',
@@ -14,6 +14,7 @@ const SHELL = [
   'js/charts.js',
   'js/backup.js',
   'js/version.js',
+  'js/themes.js',
   'js/guard.js',
   'js/views/today.js',
   'js/views/add.js',
@@ -28,6 +29,18 @@ const SHELL = [
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
+  'icons/label-180.png',
+  'icons/label-192.png',
+  'icons/safety-180.png',
+  'icons/safety-192.png',
+  'icons/sage-180.png',
+  'icons/sage-192.png',
+  'icons/pool-180.png',
+  'icons/pool-192.png',
+  'icons/plum-180.png',
+  'icons/plum-192.png',
+  'icons/graphite-180.png',
+  'icons/graphite-192.png',
 ];
 
 self.addEventListener('install', (event) => {

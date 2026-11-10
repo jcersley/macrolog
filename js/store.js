@@ -7,7 +7,7 @@ const KEY = 'macrolog.v1';
 const defaults = () => ({
   version: 1,
   profile: null, // { sex, age, heightCm, weightKg, activity, rateKgPerWeek, goalWeightKg? }
-  settings: { units: 'us', usdaKey: '', weighDismissed: '', lastBackup: '', backupSnoozed: '' },
+  settings: { units: 'us', usdaKey: '', weighDismissed: '', lastBackup: '', backupSnoozed: '', palette: 'label', appearance: 'auto' },
   foods: [], // { id, name, brand, barcode, servingLabel, servingGrams?, nutrients, source, lastUsed, uses }
   meals: [], // { id, name, yield, items: [{ name, servings, servingLabel, nutrients }], lastUsed }
   // Batch cooking: a recipe holds dated batches, each with its own ingredients and cooked weight.

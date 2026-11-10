@@ -15,6 +15,16 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/app.css">
+  <script>
+    // Apply the saved color palette before the page draws, so it never flashes the default.
+    try {
+      var t = JSON.parse(localStorage.getItem('macrolog.theme') || 'null');
+      if (t && t.css) {
+        var st = document.createElement('style'); st.id = 'theme'; st.textContent = t.css; document.head.appendChild(st);
+        var ic = document.querySelector('link[rel="apple-touch-icon"]'); if (ic && t.icon) ic.setAttribute('href', t.icon);
+      }
+    } catch (e) {}
+  </script>
 </head>
 <body>
   <div id="app">

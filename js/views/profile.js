@@ -4,9 +4,10 @@ import {
   ACTIVITY, computeGoals, kgToLb, lbToKg, ftInToCm, cmToFtIn, trimNum, nutrientMeta, dateKey,
   MACRO_KEYS, MACRO_KCAL, WATCHABLE, DEFAULT_WATCH,
 } from '../nutrition.js';
-import { esc, fmt, mount, toast, readNum, fmtWeight, confirmSheet, longDate } from '../ui.js';
+import { esc, fmt, mount, toast, readNum, fmtWeight, confirmSheet, longDate, icon } from '../ui.js';
 import { exportBackup } from '../backup.js';
 import { APP_VERSION, RELEASED, CHANGELOG } from '../version.js';
+import { PALETTES, iconPath } from '../themes.js';
 
 const RATES = {
   us: [0, 0.5, 1, 1.5, 2].map((lb) => ({ kg: lbToKg(lb), label: lb ? `${lb} lb a week` : 'Maintain my weight' })),
@@ -103,6 +104,28 @@ export function renderProfile(view, ctx) {
     </form>
     <section class="panel" aria-labelledby="h-goals"><h2 id="h-goals">Your daily goals</h2><div id="goals"></div></section>
     <section class="panel" aria-labelledby="h-settings"><h2 id="h-settings">Settings</h2>
+      <h3 class="subhead" id="h-palette">Color palette</h3>
+      <div class="palettes" role="radiogroup" aria-labelledby="h-palette">
+        ${PALETTES.map((p) => {
+          const t = p.light;
+          return `<label class="pal">
+            <input type="radio" name="palette" value="${p.id}"${(store.state.settings.palette || 'label') === p.id ? ' checked' : ''}>
+            <span class="pal-top"><img src="${iconPath(p.id, 180)}" alt=""><span class="pal-name">${esc(p.name)}</span></span>
+            <span class="pal-swatches" aria-hidden="true">${[t.bg, t.panel, t.ink, t.accent, t.over].map((c) => `<i style="background:${c}"></i>`).join('')}</span>
+            <small>${esc(p.blurb)}</small>
+            <span class="pal-check" aria-hidden="true">${icon.check}</span>
+          </label>`;
+        }).join('')}
+      </div>
+      <fieldset class="field"><legend>Light or dark</legend>
+        <div class="seg small" id="appearance">
+          ${[['auto', 'Match phone'], ['light', 'Light'], ['dark', 'Dark']]
+            .map(([v, l]) => `<label class="seg-opt"><input type="radio" name="appearance" value="${v}"${(store.state.settings.appearance || 'auto') === v ? ' checked' : ''}><span>${l}</span></label>`)
+            .join('')}
+        </div>
+      </fieldset>
+      <p class="hint">The icon above is the one your home screen gets. iPhone saves the icon when you add the app, so to change it: export a backup, delete the app from your home screen, add it again from Safari, then restore the backup. Deleting it erases the app's data, so do the backup first.</p>
+      <h3 class="subhead">Food databases</h3>
       <label class="field"><span>USDA API key <small>optional</small></span><input id="s-key" autocomplete="off" spellcheck="false" value="${esc(store.state.settings.usdaKey)}" placeholder="Uses a shared demo key if blank"></label>
       <p class="hint">The shared key allows only a few dozen lookups an hour. A free personal key from api.data.gov raises that to 1,000.</p>
       <button type="button" class="btn" data-act="savekey">Save key</button>
@@ -192,6 +215,14 @@ export function renderProfile(view, ctx) {
     toast(res.ok ? `Restored ${res.counts.foods} foods, ${res.counts.entries} diary entries and ${res.counts.weights} weigh-ins` : res.error);
   });
 
+  root.querySelectorAll('input[name="palette"], input[name="appearance"]').forEach((el) =>
+    el.addEventListener('change', () => {
+      const palette = root.querySelector('input[name="palette"]:checked')?.value || 'label';
+      const appearance = root.querySelector('input[name="appearance"]:checked')?.value || 'auto';
+      readForm(root, store.state.settings.units);
+      store.setSettings({ palette, appearance });
+    })
+  );
   root.querySelector('#warn-keys').addEventListener('change', () => {
     const keys = [...root.querySelectorAll('#warn-keys input:checked')].map((i) => i.value);
     store.setSettings({ warnKeys: keys });
